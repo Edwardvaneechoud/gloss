@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gloss-flowfile"
+version = "0.1.0.dev0"
+description = "Gloss plugin for the Flowfile catalog: catalog seam plus lineage-based proposals."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+dependencies = ["gloss-semantics"]
+
+[project.entry-points."gloss.catalogs"]
+flowfile = "gloss_flowfile:FlowfileCatalog"
+
+[project.entry-points."gloss.sources"]
+flowfile-lineage = "gloss_flowfile:LineageSource"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gloss_flowfile"]

@@ -1,0 +1,78 @@
+# An Apache Ossie semantic model for the example shop.
+# Import it on top of the catalog with: gloss import ossie examples/semantic_model.yaml --key-by source
+version: "0.3.0.dev0"
+name: shop
+description: Web shop orders and customers
+
+datasets:
+  - name: orders
+    source: shop.orders
+    primary_key: [order_id]
+    description: One row per order placed in the web shop
+    fields:
+      - name: order_id
+        expression: {sql: order_id}
+        datatype: Integer
+      - name: customer_id
+        expression: {sql: customer_id}
+        datatype: Integer
+      - name: order_date
+        expression: {sql: order_date}
+        datatype: Date
+        dimension: {is_time: true}
+        description: Date the order was placed (shop time zone)
+      - name: amount
+        expression: {sql: amount}
+        datatype: Decimal
+        description: Order value including VAT, in EUR
+        ai_context:
+          synonyms: [order value, revenue, turnover]
+      - name: status
+        expression: {sql: status}
+        datatype: String
+        description: Fulfilment status (open, shipped, cancelled)
+
+  - name: customers
+    source: shop.customers
+    primary_key: [customer_id]
+    description: One row per registered customer
+    fields:
+      - name: customer_id
+        expression: {sql: customer_id}
+        datatype: Integer
+      - name: name
+        expression: {sql: name}
+        datatype: String
+        nonportable_extensions:
+          - vendor_name: gloss
+            data: {confidentiality: confidential, classification: [pii.name]}
+      - name: email
+        expression: {sql: email}
+        datatype: String
+        description: Login e-mail address
+        nonportable_extensions:
+          - vendor_name: gloss
+            data: {confidentiality: restricted, classification: [pii.email]}
+      - name: country
+        expression: {sql: country}
+        datatype: String
+        description: ISO 3166-1 alpha-2 country code
+
+relationships:
+  - name: orders_customers
+    from: orders
+    to: customers
+    from_columns: [customer_id]
+    to_columns: [customer_id]
+
+metrics:
+  - name: total_revenue
+    description: Sum of order value including VAT, excluding cancelled orders
+    expression: {sql: "SUM(orders.amount) FILTER (WHERE orders.status <> 'cancelled')"}
+    datatype: Decimal
+    ai_context:
+      synonyms: [revenue, sales, turnover]
+  - name: order_count
+    description: Number of orders
+    expression: {sql: COUNT(DISTINCT orders.order_id)}
+    datatype: Integer

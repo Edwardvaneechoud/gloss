@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+*.db
+*.db-shm
+*.db-wal
+report.html
+.DS_Store
+.idea/
+.vscode/
+.coverage
+htmlcov/
+*.yaml.bak
+# working notes that are not part of the project
+REVIEW.md

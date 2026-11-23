@@ -1,0 +1,23 @@
+# The same catalog a week later: `status` was dropped, `channel` added,
+# and customer_id became a string. Syncing this shows drift detection.
+# Try: gloss sync file:examples/catalog_v2.yaml
+name: shop
+assets:
+  shop.orders:
+    description: Orders placed in the web shop
+    primary_key: [order_id]
+    columns:
+      - {name: order_id, dtype: Int64}
+      - {name: customer_id, dtype: Utf8}
+      - {name: order_date, dtype: Date}
+      - {name: amount, dtype: "Decimal(18,2)"}
+      - {name: channel, dtype: Utf8}
+      - {name: created_at, dtype: "Datetime(time_unit='us', time_zone='UTC')"}
+  shop.customers:
+    primary_key: [customer_id]
+    columns:
+      - {name: customer_id, dtype: Int64}
+      - {name: name, dtype: Utf8}
+      - {name: email, dtype: Utf8}
+      - {name: country, dtype: Utf8}
+      - {name: signup_date, dtype: Date}

@@ -1,0 +1,140 @@
+
+==============================================================================
+1. Week 1. Edward connects the catalog
+==============================================================================
+  3 tables found: shop.orders, shop.customers, mkt.newsletter
+  41 structural facts accepted automatically (columns, types, keys)
+  shop.orders/amount is now known as: {'datatype': 'Decimal', 'expression': {'sql': 'amount'}, 'physical_type': 'Decimal(18,2)'}
+
+==============================================================================
+2. Edward adds meaning in code: two reusable types, descriptions, a join, a metric
+==============================================================================
+  saved: 29 new, 0 unchanged, 7 corroborated   (corroborated = Edward confirmed what the catalog already said)
+  nothing Edward wrote is live yet; it all waits for review:
+  dataset         accepted  reviewed  proposed     stale  rejected  progress
+  (model-level)          0         0        17         0         0  ..........   0.0%
+  mkt.newsletter        10         0         0         0         0  ########## 100.0%
+  shop.customers        14         0         4         0         0  ########..  77.8%
+  shop.orders           17         0         8         0         0  #######...  68.0%
+
+==============================================================================
+3. Alice reviews Edward's work
+==============================================================================
+  <proposed dataset:shop.customers description='One row per customer account' by human:edward id=84fbd234>
+  <proposed dataset:shop.orders description='One row per order placed in the web shop' by human:edward id=c5c14ba1>
+  <proposed field:shop.customers/country semantic_type='country_code' by human:edward id=dd94c97a>
+  <proposed field:shop.customers/email description='Login e-mail address' by human:edward id=ecfb2ae9>
+  … 29 in total
+  Alice accepted 29 facts
+  the email column now inherits from its type: confidentiality=restricted, classification=['pii.email'], 1 check
+
+==============================================================================
+4. Gloss suggests the types for columns nobody has described yet
+==============================================================================
+  suggested: field:mkt.newsletter/subscriber_email is a email_address (confidence 0.7)
+  suggested: field:mkt.newsletter/country is a country_code (confidence 0.7)
+  Alice accepted 2 suggestions; mkt.newsletter/subscriber_email is now restricted
+
+==============================================================================
+5. Week 2. An AI agent (Claude) uses the model over MCP
+==============================================================================
+  >>> search_model(text='turnover')
+      [{"subject": "field:shop.orders/amount", "kind": "field", "name": "amount", "dataset": "shop.orders", "datatype": "Decimal", "description": "Order value including VAT, in EUR"}]
+  >>> get_model_context(datasets=['mkt.newsletter'])
+      {"visibility_limit": "internal", "datasets": [{"name": "mkt.newsletter", "fields": [{"name": "subscriber_email", "datatype": "String", "confidentiality": "restricted", "redacted": true}, {"name": "country", "datatype": "String", "expression": {"sql": "country"}, "description": "ISO 3166-1 alpha-2 co
+  Claude can see subscriber_email exists, but not what it contains: it is restricted.
+  >>> propose_fact(subject='dataset:mkt.newsletter', attribute='description', value='One row per newsletter subscription', confidence=0.8, rationale='table has a subscriber e-mail and a subscription timestamp')
+      {"outcome": "created", "id": "46af96aff25041a98948ee6ec167f618", "status": "proposed"}
+  >>> propose_fact(subject='field:shop.orders/amount', attribute='synonyms', value=['revenue', 'turnover', 'profit'], confidence=0.4, rationale='users asked for profit per country')
+      {"outcome": "created", "id": "ca965eaafbc6448fbaa36ccf13a9cbb2", "status": "proposed"}
+
+==============================================================================
+6. Alice reviews what the agent proposed
+==============================================================================
+  <proposed dataset:mkt.newsletter description='One row per newsletter subscription' by ai:claude 0.80 id=46af96af>
+  <proposed field:shop.orders/amount synonyms='["revenue", "turnover", "profit"]' by ai:claude 0.40 id=ca965eaa>
+  accepted the description, rejected 'profit' with a reason
+  >>> propose_fact(subject='field:shop.orders/amount', attribute='synonyms', value=['revenue', 'turnover', 'profit'], confidence=0.9)
+      {"outcome": "previously_rejected", "id": "ca965eaafbc6448fbaa36ccf13a9cbb2", "status": "rejected"}
+  the same suggestion can't come back
+
+==============================================================================
+7. Data quality: run the checks on this week's data
+==============================================================================
+  FAIL  field:shop.customers/email               matches(pattern='^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$') 1/4 rows fail  (from type:email_address)
+  FAIL  field:shop.customers/country             matches(pattern='^[A-Z]{2}$')          1/4 rows fail  (from type:country_code)
+        e.g. ['nl']
+  FAIL  field:mkt.newsletter/subscriber_email    matches(pattern='^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$') 1/2 rows fail  (from type:email_address)
+  FAIL  field:mkt.newsletter/country             matches(pattern='^[A-Z]{2}$')          1/2 rows fail  (from type:country_code)
+        e.g. ['Netherlands']
+  failing e-mail values are not shown: the type makes them restricted
+
+==============================================================================
+8. Publish: export the accepted model as Apache Ossie YAML
+==============================================================================
+  wrote shop.yaml: 3 datasets, 1 relationship, valid Ossie: True
+  amount:
+    name: amount
+    expression:
+      sql: amount
+    description: Order value including VAT, in EUR
+    datatype: Decimal
+    ai_context:
+      synonyms:
+      - revenue
+      - turnover
+    nonportable_extensions:
+    - vendor_name: gloss
+      data:
+        physical_type: Decimal(18,2)
+
+==============================================================================
+9. Week 3. The catalog changes: 'status' is dropped, newsletter 'country' becomes Int32
+==============================================================================
+  - column 'status' removed from shop.orders
+  - type of mkt.newsletter.country changed from String to Integer
+  5 facts went back to review:
+  <stale field:mkt.newsletter/country semantic_type='country_code' by inferred:type-names 0.70 id=4296e61c>
+  <stale field:shop.orders/status checks='[{"check": "one_of", "values": ["open", "shipped"…' by human:edward id=83777ecd>
+  <stale field:shop.orders/status datatype='String' by catalog:shop 1.00 id=7ea557ff>
+  <stale field:shop.orders/status expression='{"sql": "status"}' by catalog:shop 1.00 id=6923e847>
+  <stale field:shop.orders/status physical_type='Utf8' by catalog:shop 1.00 id=27810b76>
+
+==============================================================================
+10. Alice resolves the stale facts
+==============================================================================
+  retracted 4 facts about the dropped status column
+  rejected country_code for mkt.newsletter/country: it is a numeric id now
+  still open: 0 facts
+
+==============================================================================
+11. Audit: the full story of one column
+==============================================================================
+  #71   proposed      catalog:shop                 expression = {'sql': 'country'}
+  #72   accepted      catalog:shop                 by rule: catalog-structure
+  #73   proposed      catalog:shop                 datatype = String
+  #74   accepted      catalog:shop                 by rule: catalog-structure
+  #75   proposed      catalog:shop                 physical_type = Utf8
+  #76   accepted      catalog:shop                 by rule: catalog-structure
+  #149  proposed      inferred:type-names          semantic_type = country_code
+  #150  accepted      human:alice                  
+  #160  marked_stale  catalog:shop                 type of mkt.newsletter.country changed from String to Integer
+  #161  proposed      catalog:shop                 physical_type = Int32
+  #162  superseded    catalog:shop                 
+  #163  accepted      catalog:shop                 by rule: catalog-structure
+  #164  proposed      catalog:shop                 datatype = Integer
+  #165  superseded    catalog:shop                 
+  #166  accepted      catalog:shop                 by rule: catalog-structure
+  #171  rejected      human:alice                  now a numeric country id, not an ISO code
+  plus 2 logged check results for mkt.newsletter
+
+==============================================================================
+12. Report
+==============================================================================
+  dataset         accepted  reviewed  proposed     stale  rejected  progress
+  (model-level)         17         0         0         0         0  ########## 100.0%
+  mkt.newsletter        12         0         0         0         1  ########## 100.0%
+  shop.customers        18         0         0         0         0  ########## 100.0%
+  shop.orders           21         0         0         0         1  ########## 100.0%
+
+  files in /tmp/gloss-demo: gloss.db, shop.yaml, report.html
