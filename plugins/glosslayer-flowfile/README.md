@@ -1,4 +1,4 @@
-# gloss-flowfile
+# glosslayer-flowfile
 
 Gloss plugin for [Flowfile](https://github.com/Edwardvaneechoud/Flowfile)'s catalog.
 
@@ -14,14 +14,14 @@ against a fake `CatalogService` with the shape of Flowfile's `CatalogTableOut`, 
 ## Embedded in Flowfile's backend
 
 ```python
-import gloss
-from gloss_flowfile import Embedded, FlowfileCatalog, LineageSource, policy_for
+import glosslayer
+from glosslayer_flowfile import Embedded, FlowfileCatalog, LineageSource, policy_for
 
 # 1. Schema: from a Flowfile Alembic revision (and again whenever Gloss is upgraded)
-gloss.schema.upgrade(op.get_bind())
+glosslayer.schema.upgrade(op.get_bind())
 
 # 2. One ledger on Flowfile's engine. Gloss adds no listeners and runs no DDL here.
-g = gloss.Gloss(gloss.SQLStore(engine), policy=policy_for(sharing=sharing_enabled()))
+g = glosslayer.Gloss(glosslayer.SQLStore(engine), policy=policy_for(sharing=sharing_enabled()))
 
 # 3. The catalog, through a CatalogService built WITHOUT an access resolver: the whole local catalog.
 semantics = Embedded(g, FlowfileCatalog(service=CatalogService(repo)))
@@ -57,7 +57,7 @@ What the pieces take care of:
   and everything known about the table moves with it. A full `sync()` also recognises a rename when the id
   matches *and* the columns are unchanged.
 - **Hub tables.** Rows Flowfile shows from a connected hub (`source="hub"`, negated ids) are skipped: their
-  meaning lives in the hub's ledger. Use `gloss.client.Federation` to show both ledgers as one.
+  meaning lives in the hub's ledger. Use `glosslayer.client.Federation` to show both ledgers as one.
 - **Who decides.** `policy_for(sharing=False)` is the desktop app: one user, their own edits accepted at
   once, AI suggestions still queued. With sharing on, people decide where they manage the namespace, and
   the policy answers from the `manage`/`read`/`admin` values passed to `view()`, so no database lookups
@@ -66,13 +66,13 @@ What the pieces take care of:
   Flowfile's own `description` field (`own_descriptions=False` turns that off). Flowfile stores no
   description per column; those stay in Gloss.
 - **Actors are ids.** `actor_for(user.id)` puts the user's id in the log, not their name; give
-  `gloss.Gloss(..., directory=Directory(lookup))` a lookup to show names. Flowfile's integer id is stable
+  `glosslayer.Gloss(..., directory=Directory(lookup))` a lookup to show names. Flowfile's integer id is stable
   on one machine. A ledger shared between machines needs an id every machine agrees on.
 
 ### Packaging (PyInstaller)
 
 - Register plugins in code so nothing depends on distribution metadata:
-  `gloss.plugins.register("catalog", "flowfile", FlowfileCatalog)`.
+  `glosslayer.plugins.register("catalog", "flowfile", FlowfileCatalog)`.
 - Add `collect_data_files("gloss")` for `gloss/ossie/ossie-schema.json` (only needed for `validate()`).
 - Gloss's core needs SQLAlchemy and PyYAML, both already Flowfile dependencies.
 

@@ -11,7 +11,7 @@ gloss_meta           schema version and index version
 
 A store given a URL owns its engine: it sets SQLite pragmas and creates or upgrades the
 schema. A store given a host's ``Engine`` touches neither: no connection listeners, no DDL.
-The host runs :func:`gloss.schema.upgrade` from its own migrations.
+The host runs :func:`glosslayer.schema.upgrade` from its own migrations.
 """
 
 from __future__ import annotations
@@ -243,7 +243,7 @@ class SQLStore:
         """Open a store on a URL (which it owns) or on a host's ``Engine`` (which it only uses).
 
         ``create`` defaults to whether the store owns its engine: True creates or upgrades the schema,
-        False only checks that it is up to date (:func:`gloss.schema.require`).
+        False only checks that it is up to date (:func:`glosslayer.schema.require`).
         """
         from .. import schema
 

@@ -2,9 +2,9 @@
 
 import pytest
 
-import gloss
-from gloss import AI, Column, Human, Metric, PermissionDenied, Proposal, Relationship, SemanticType, Status, Table
-from gloss.ids import SubjectId, path_covers
+import glosslayer
+from glosslayer import AI, Column, Human, Metric, PermissionDenied, Proposal, Relationship, SemanticType, Status, Table
+from glosslayer.ids import SubjectId, path_covers
 
 ANN, BOB = Human("ann"), Human("bob")
 
@@ -83,9 +83,9 @@ def test_a_relationship_is_accepted_as_a_unit(g):
 
 
 def test_a_group_is_all_or_nothing():
-    from gloss import DefaultPolicy
+    from glosslayer import DefaultPolicy
 
-    with gloss.open("sqlite://", policy=DefaultPolicy(mode="four_eyes")) as g:
+    with glosslayer.open("sqlite://", policy=DefaultPolicy(mode="four_eyes")) as g:
         g.propose_many(
             [Proposal("relationship:s::oc", "from", "s.orders", group="g1"),
              Proposal("relationship:s::oc", "to", "s.customers", group="g1"),
@@ -152,35 +152,35 @@ def test_structured_metrics_and_column_roles(g):
     with pytest.raises(ValueError):
         g.propose("field:s.orders/amount", "role", "measure", source=ANN)
 
-    from gloss.ossie import OssieSource, validate
+    from glosslayer.ossie import OssieSource, validate
 
     export = g.to_ossie()
     assert validate(export.document) == []
-    with gloss.open("sqlite://") as other:
+    with glosslayer.open("sqlite://") as other:
         other.propose_many(OssieSource(export.document).proposals(), source="import:ossie", actor=ANN, accept=True)
         assert other.metric("revenue", table="orders").dimensions == ["country"]
         assert other.table("orders")["amount"].role == "amount"
 
 
 def test_host_attributes_round_trip_through_ossie(g):
-    gloss.register_attribute("trusted", ["dataset", "metric"], validate=bool)
+    glosslayer.register_attribute("trusted", ["dataset", "metric"], validate=bool)
     try:
         g.add(Table("s.orders", description="x").add_column("a", int), source=ANN, accept=True)
         g.propose("dataset:s.orders", "trusted", True, source=ANN, accept=True)
         with pytest.raises(ValueError):
             g.propose("field:s.orders/a", "trusted", True, source=ANN)
         export = g.to_ossie()
-        from gloss.ossie import OssieSource, validate
+        from glosslayer.ossie import OssieSource, validate
 
         assert validate(export.document) == []
         ext = export.document["datasets"][0]["nonportable_extensions"][0]["data"]
         assert ext["trusted"] is True
-        with gloss.open("sqlite://") as other:
+        with glosslayer.open("sqlite://") as other:
             other.propose_many(OssieSource(export.document).proposals(), source="import:ossie", actor=ANN,
                                accept=True)
             assert other.current("dataset:orders")["trusted"] is True
     finally:
-        from gloss import model
+        from glosslayer import model
 
         model._ATTRIBUTES.pop("trusted")
 
@@ -192,12 +192,12 @@ def test_namespaces_survive_an_ossie_round_trip(g):
     g.add(custs, orders, Relationship("oc", on={orders["customer_id"]: custs["id"]}, namespace="crm"),
           Metric("customers", "COUNT(*)", namespace="crm"), source=ANN, accept=True)
     g.propose("model:crm", "name", "crm_model", source=ANN, accept=True)
-    from gloss.ossie import OssieSource, validate
+    from glosslayer.ossie import OssieSource, validate
 
     export = g.to_ossie(namespace="crm")
     assert validate(export.document) == [] and export.document["name"] == "crm_model"
     assert [r["name"] for r in export.document["relationships"]] == ["oc"]
-    with gloss.open("sqlite://") as other:
+    with glosslayer.open("sqlite://") as other:
         src = OssieSource(export.document, key_by="source")
         other.propose_many(src.proposals(), source="import:ossie", actor=ANN, accept=True)
         assert str(other.relationships()[0].subject) == "relationship:crm::oc"

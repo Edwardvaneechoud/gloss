@@ -20,7 +20,7 @@ earlier development snapshots are not supported.
 ### Embedding
 - Actor-bound views (`Gloss.as_actor`): reads scoped by path and confidentiality, writes made as the
   actor, host context passed to the policy, `via` and correlation ids recorded on events.
-- No listeners, pragmas or DDL on a host's engine; `gloss.schema.upgrade(connection)` with a version
+- No listeners, pragmas or DDL on a host's engine; `glosslayer.schema.upgrade(connection)` with a version
   ladder; writes can join a host transaction.
 - Post-commit subscribers, a read hook for AI-facing views, plugins and attributes registered in code.
 - Typed REST API, a client for it, and `Federation` to use several ledgers as one.
@@ -35,4 +35,4 @@ earlier development snapshots are not supported.
   rename detection and description write-back.
 - Apache Ossie 0.3.0.dev0 import and export, validated against the vendored schema.
 - MCP server, CLI, Mermaid and HTML reports, a git sink.
-- `gloss-flowfile`: catalog, lineage source and backend glue for Flowfile.
+- `glosslayer-flowfile`: catalog, lineage source and backend glue for Flowfile.

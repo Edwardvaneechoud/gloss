@@ -5,8 +5,8 @@ import pickle
 
 import pytest
 
-import gloss
-from gloss import (
+import glosslayer
+from glosslayer import (
     AI,
     Actor,
     Column,
@@ -21,8 +21,8 @@ from gloss import (
     Table,
     UInt,
 )
-from gloss.dtypes import Float, Opaque, parse
-from gloss.ossie import OssieSource, to_ossie, validate
+from glosslayer.dtypes import Float, Opaque, parse
+from glosslayer.ossie import OssieSource, to_ossie, validate
 
 
 # ----------------------------------------------------------------- actors
@@ -141,7 +141,7 @@ def test_full_example(g):
     rel = Relationship("returns_orders", on={returns["order_id"]: orders["order_id"]})
     r = g.add(returns, orders, rel, source=Human("edward"))
     assert r.created > 0 and all(a.source == "human:edward" for a in g.find(dataset="shop.returns"))
-    g.bulk("accept", gloss.Query(), actor=Human("edward"))
+    g.bulk("accept", glosslayer.Query(), actor=Human("edward"))
 
     back = g.table("shop.returns")
     assert back["return_id"].dtype == Int(32)
@@ -157,14 +157,14 @@ def test_full_example(g):
     assert refund["nonportable_extensions"][0]["data"]["physical_type"] == "Decimal(18,2)"
 
     # and it survives a round trip through Ossie into a fresh ledger
-    with gloss.open("sqlite://") as g2:
+    with glosslayer.open("sqlite://") as g2:
         g2.propose_many(OssieSource(doc).proposals(), source=Import("ossie"))
-        g2.bulk("accept", gloss.Query(), actor=Human("edward"))
+        g2.bulk("accept", glosslayer.Query(), actor=Human("edward"))
         assert g2.table("returns")["refund"].dtype == Decimal(18, 2)
 
 
 def test_apply_converges_on_what_the_code_declares(g):
-    from gloss import Column, Human, Metric, Status, Table
+    from glosslayer import Column, Human, Metric, Status, Table
 
     me = Human("me")
     v1 = Table("shop.orders", description="Orders")

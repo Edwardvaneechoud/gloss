@@ -2,15 +2,15 @@
 
 import pytest
 
-import gloss
-from gloss import AI, Confidentiality, DefaultPolicy, Human, PermissionDenied, Proposal, RolePolicy, Status
-from gloss.model import EventType
+import glosslayer
+from glosslayer import AI, Confidentiality, DefaultPolicy, Human, PermissionDenied, Proposal, RolePolicy, Status
+from glosslayer.model import EventType
 
 F = "field:sales.orders/amount"
 
 
 def _open(**policy):
-    return gloss.open("sqlite://", policy=DefaultPolicy(**policy))
+    return glosslayer.open("sqlite://", policy=DefaultPolicy(**policy))
 
 
 def test_solo_accepts_your_own_edit_in_one_append():
@@ -65,7 +65,7 @@ def test_four_eyes():
         with pytest.raises(PermissionDenied):
             g.accept(mine.id, actor=Human("ann"))
         with pytest.raises(PermissionDenied):
-            g.add(gloss.Table("t").add_column("c", int), actor=Human("ann"), accept=True)
+            g.add(glosslayer.Table("t").add_column("c", int), actor=Human("ann"), accept=True)
         assert g.find(dataset="t") == []  # refused before anything was written
 
         # a second person stating the same value is the second pair of eyes
@@ -83,7 +83,7 @@ def test_restore_puts_a_superseded_value_back():
         g.accept(v1.id, actor=Human("bob"))
         v2 = g.propose(F, "description", "v2", source=Human("bob"))
         g.accept(v2.id, actor=Human("ann"))
-        with pytest.raises(gloss.InvalidTransition):
+        with pytest.raises(glosslayer.InvalidTransition):
             g.accept(v1.id, actor=Human("bob"))  # superseded values come back only through restore
         # its author may put it back without waiting for a second person: it was reviewed before
         assert g.restore(v1.id, actor=Human("ann")).status is Status.ACCEPTED
@@ -95,7 +95,7 @@ def test_restore_puts_a_superseded_value_back():
 
 def test_a_non_steward_cannot_retract_or_stale_a_stewarded_fact():
     pol = RolePolicy(stewards={"finance.": {"human:alice"}})
-    with gloss.open("sqlite://", policy=pol) as g:
+    with glosslayer.open("sqlite://", policy=pol) as g:
         a = g.propose("field:finance.invoices/total", "description", "x", source="ai:claude")
         g.accept(a.id, actor="human:alice")
         with pytest.raises(PermissionDenied):
@@ -142,7 +142,7 @@ def test_host_context_reaches_the_policy_and_via_is_recorded():
         def may_decide(self, actor, assertion, context):
             return bool(context) and context.attrs.get("sign_in") == "direct"
 
-    with gloss.open("sqlite://", policy=DirectSignInOnly()) as g:
+    with glosslayer.open("sqlite://", policy=DirectSignInOnly()) as g:
         a = g.propose(F, "description", "x", source=Human("a"))
         delegated = g.as_actor(Human("b"), via="server:eu-1", context={"sign_in": "delegated"})
         with pytest.raises(PermissionDenied):
@@ -160,7 +160,7 @@ def test_a_custom_policy_decides_proposals(g):
         def on_propose(self, actor, source, subject, attribute, context=None):
             return "accept" if source.startswith("import:trusted") else "queue"
 
-    with gloss.open("sqlite://", policy=AcceptImports()) as h:
+    with glosslayer.open("sqlite://", policy=AcceptImports()) as h:
         res = h.propose_many([Proposal(F, "description", "x")], source="import:trusted-model")
         assert res[0].accepted and h.log()[-1].data == {"from_status": "proposed", "auto": True, "rule": "policy"}
         queued = h.propose_many([Proposal(F, "label", "x")], source="import:trusted-model", auto_accept=False)
@@ -168,7 +168,7 @@ def test_a_custom_policy_decides_proposals(g):
 
 
 def test_scope_intersection():
-    from gloss import Scope
+    from glosslayer import Scope
 
     a = Scope(prefixes=("sales", "finance.eu"), max_confidentiality=Confidentiality.CONFIDENTIAL)
     b = Scope(prefixes=("sales.emea", "finance"), max_confidentiality=Confidentiality.INTERNAL)

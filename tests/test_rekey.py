@@ -2,10 +2,10 @@
 
 import pytest
 
-import gloss
-from gloss import Column, Human, Metric, PermissionDenied, Relationship, RolePolicy, SemanticType, Status, Table
-from gloss import String, checks
-from gloss.model import EventType
+import glosslayer
+from glosslayer import Column, Human, Metric, PermissionDenied, Relationship, RolePolicy, SemanticType, Status, Table
+from glosslayer import String, checks
+from glosslayer.model import EventType
 
 ME = Human("me")
 
@@ -53,7 +53,7 @@ def test_renamed_table_keeps_what_was_known(shop):
     assert len(history) > before and history[-1].type is EventType.REKEYED
     assert history[-1].data["from_subject"] == "dataset:crm.orders" and history[-1].actor == "catalog:wh"
     # a rejected suggestion stays rejected under the new name
-    again = g.propose_many([gloss.Proposal("field:crm.order_lines/amount", "description", "wrong")],
+    again = g.propose_many([glosslayer.Proposal("field:crm.order_lines/amount", "description", "wrong")],
                            source="ai:claude")
     assert again[0].outcome == "previously_rejected"
     # SQL that names the old table goes back to review; SQL that does not is left alone
@@ -130,7 +130,7 @@ def test_a_value_already_accepted_at_the_target_wins(shop):
 
 def test_check_results_follow_a_renamed_column(shop):
     g = shop
-    from gloss.checks import CheckResult
+    from glosslayer.checks import CheckResult
 
     g.record_check_results([CheckResult("field:crm.orders/amount", checks.not_null().to_dict(), True, 0, 3)])
     g.rekey("dataset:crm.orders", "dataset:crm.sales", actor=ME)
@@ -140,7 +140,7 @@ def test_check_results_follow_a_renamed_column(shop):
 
 def test_a_move_needs_a_say_at_both_ends():
     policy = RolePolicy(stewards={"sales.": {"human:alice"}, "finance.": {"human:bob"}}, admins={"human:root"})
-    with gloss.open("sqlite://", policy=policy) as g:
+    with glosslayer.open("sqlite://", policy=policy) as g:
         g.add(Table("sales.orders", description="x").add_column("amount", float), source="human:root", accept=True)
         with pytest.raises(PermissionDenied):
             g.rekey("dataset:sales.orders", "dataset:finance.orders", actor="human:alice")

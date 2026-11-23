@@ -3,15 +3,15 @@ import json
 
 import pytest
 
-from gloss import ai
-from gloss.ossie import OssieSource
-import gloss
+from glosslayer import ai
+from glosslayer.ossie import OssieSource
+import glosslayer
 
 
 @pytest.fixture
 def shop(g, examples):
     g.propose_many(OssieSource(examples / "semantic_model.yaml").proposals(), source="import:ossie")
-    g.bulk("accept", gloss.Query(), actor="human:a")
+    g.bulk("accept", glosslayer.Query(), actor="human:a")
     return g
 
 
@@ -48,7 +48,7 @@ def test_review_status_hides_values_above_limit(shop):
 
 def test_mcp_tools(shop):
     pytest.importorskip("mcp")
-    from gloss.mcp_server import build_server
+    from glosslayer.mcp_server import build_server
 
     server = build_server(shop, agent="claude")
     names = {t.name for t in asyncio.run(server.list_tools())}

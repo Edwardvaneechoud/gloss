@@ -282,7 +282,7 @@ def to_ossie(
 
 @lru_cache(maxsize=1)
 def _schema() -> dict[str, Any]:
-    return json.loads(resources.files("gloss.ossie").joinpath("ossie-schema.json").read_text())
+    return json.loads(resources.files("glosslayer.ossie").joinpath("ossie-schema.json").read_text())
 
 
 def validate(document: dict[str, Any]) -> list[str]:
@@ -290,7 +290,7 @@ def validate(document: dict[str, Any]) -> list[str]:
     try:
         import jsonschema
     except ImportError as exc:  # pragma: no cover
-        raise RuntimeError("Validation needs the 'validate' extra: pip install gloss-semantics[validate]") from exc
+        raise RuntimeError("Validation needs the 'validate' extra: pip install glosslayer[validate]") from exc
     validator = jsonschema.Draft202012Validator(_schema())
     return [
         f"{'/'.join(str(p) for p in err.absolute_path) or '$'}: {err.message}"

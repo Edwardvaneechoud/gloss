@@ -1,11 +1,11 @@
 """Sync beyond the full pull: partial listings, single assets, renames, deletes and write-back."""
 
-import gloss
-from gloss import Human, Status
-from gloss.catalogs.file import FileCatalog
-from gloss.model import EventType
-from gloss.seams import AssetSchema, Column, Coverage, asset_fingerprint
-from gloss.sync import asset_moved, asset_removed, sync, sync_asset, write_back
+import glosslayer
+from glosslayer import Human, Status
+from glosslayer.catalogs.file import FileCatalog
+from glosslayer.model import EventType
+from glosslayer.seams import AssetSchema, Column, Coverage, asset_fingerprint
+from glosslayer.sync import asset_moved, asset_removed, sync, sync_asset, write_back
 
 
 class DictCatalog:
@@ -136,11 +136,11 @@ def test_a_changed_description_is_proposed_again_and_nothing_goes_stale(g, tmp_p
 def test_sync_never_accepts_meaning_even_with_a_permissive_run(g, examples):
     rep = sync(g, FileCatalog(examples / "catalog.yaml"))
     assert rep.accepted and all(
-        gloss.model.is_structural(a.subject_id, a.attribute) for a in g.find(statuses=[Status.ACCEPTED])
+        glosslayer.model.is_structural(a.subject_id, a.attribute) for a in g.find(statuses=[Status.ACCEPTED])
     )
     accepted = [e for e in g.log() if e.type is EventType.ACCEPTED]
     assert all(e.data["auto"] and e.data["rule"] == "catalog-structure" for e in accepted)
-    with gloss.open("sqlite://") as h:
+    with glosslayer.open("sqlite://") as h:
         rep = sync(h, FileCatalog(examples / "catalog.yaml"), auto_accept_structure=False)
         assert rep.accepted == 0 and h.find(statuses=[Status.ACCEPTED]) == []
 
@@ -152,7 +152,7 @@ def test_accepted_descriptions_are_written_back_to_the_catalog(g):
     d = g.propose("dataset:main.alice.orders", "description", "Orders", source=Human("a"))
     f = g.propose("field:main.alice.orders/amount", "description", "Order value", source=Human("a"))
     assert cat.written == {}  # a proposal is not meaning yet
-    g.bulk("accept", gloss.Query(dataset="main.alice.orders", attribute="description"), actor=Human("a"))
+    g.bulk("accept", glosslayer.Query(dataset="main.alice.orders", attribute="description"), actor=Human("a"))
     assert cat.written == {"main.alice.orders": {"description": "Orders",
                                                  "fields": {"amount": {"description": "Order value"}}}}
     assert {d.id, f.id} == {a.id for a in g.find(attribute="description")}
@@ -180,8 +180,8 @@ def test_subscribers_get_committed_events_with_seq(g):
 
 
 def test_correlation_groups_one_action(g):
-    rows = g.propose_many([gloss.Proposal("field:t/a", "description", "x"),
-                           gloss.Proposal("field:t/b", "description", "y")], source=Human("a"))
+    rows = g.propose_many([glosslayer.Proposal("field:t/a", "description", "x"),
+                           glosslayer.Proposal("field:t/b", "description", "y")], source=Human("a"))
     one = {e.correlation for e in g.log()}
     assert len(one) == 1 and None not in one
     g.as_actor(Human("b"), correlation="req-42").transition_many("accept", [r.assertion.id for r in rows])

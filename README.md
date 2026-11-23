@@ -12,10 +12,10 @@ or a small service you run next to any catalog. Catalogs, importers, exporters a
 through plugins.
 
 ```python
-import gloss
-from gloss import Table, Column, SemanticType, Human, Int, String, checks
+import glosslayer
+from glosslayer import Table, Column, SemanticType, Human, Int, String, checks
 
-g = gloss.open("sqlite:///gloss.db")
+g = glosslayer.open("sqlite:///gloss.db")
 
 Email = SemanticType("email_address", dtype=String(320), confidentiality="restricted",
                      checks=[checks.matches(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")])
@@ -277,11 +277,11 @@ Objects are *descriptions*. Saving one proposes a fact per attribute, so they ge
 log as everything else.
 
 ```python
-import gloss
-from gloss import Table, Column, Relationship, Metric, SemanticType, Human, checks
-from gloss import Int, Decimal, String, DateTime
+import glosslayer
+from glosslayer import Table, Column, Relationship, Metric, SemanticType, Human, checks
+from glosslayer import Int, Decimal, String, DateTime
 
-g = gloss.open("sqlite:///gloss.db")
+g = glosslayer.open("sqlite:///gloss.db")
 
 Email = SemanticType(
     "email_address",
@@ -339,7 +339,7 @@ column its `role` (`key`, `time`, `category`, `amount`), for hosts that build me
 ### Review
 
 ```python
-from gloss import AI, PermissionDenied
+from glosslayer import AI, PermissionDenied
 
 print(len(g.pending()))                        # 40
 
@@ -354,7 +354,7 @@ except PermissionDenied as exc:
     print(exc)                                 # ai:claude may not accept assertion 17aa…
 g.reject(idea.id, actor=Human("alice"), comment="it also covers returns")
 
-done, failed = g.bulk("accept", gloss.Query(source_prefix="human:edward"), actor=Human("alice"))
+done, failed = g.bulk("accept", glosslayer.Query(source_prefix="human:edward"), actor=Human("alice"))
 print(len(done))                               # 39
 ```
 
@@ -427,7 +427,7 @@ df = pl.DataFrame({
     "email": ["ann@example.com", "not-an-email", None],
     "country": ["NL", "nl", "BE"],
 })
-results = gloss.checks.run_polars(g, "crm.customers", df)
+results = glosslayer.checks.run_polars(g, "crm.customers", df)
 for r in results:
     print(r)
 # FAIL  field:crm.customers/email     matches(pattern='^[^@\\s]+@…')  1/3 rows fail  (from type:email_address)
@@ -438,7 +438,7 @@ g.record_check_results(results, runner=Human("edward"))     # quality history pe
 history = g.check_history(dataset="crm.customers")
 
 # For engines that never collect in the calling process: one lazy query counts every failure.
-plan = gloss.checks.polars_plan(g, "crm.customers", df.lazy())
+plan = glosslayer.checks.polars_plan(g, "crm.customers", df.lazy())
 row = plan.frame.collect()                     # ship plan.frame to where the data is, collect it there
 results = plan.results(row)                    # the same CheckResults, from that one row
 g.record_check_results(results, runner="system:worker-1", run_id="run-2026-11-23-001")   # your own run id
@@ -447,7 +447,7 @@ g.record_check_results(results, runner="system:worker-1", run_id="run-2026-11-23
 Or generate SQL to run in your warehouse (`ansi`, `postgres`, `duckdb`, `snowflake`, `bigquery`):
 
 ```python
-queries = gloss.checks.to_sql(g, "crm.customers", dialect="duckdb")
+queries = glosslayer.checks.to_sql(g, "crm.customers", dialect="duckdb")
 subject, check, sql = queries[0]               # each query returns failed_rows and total_rows
 ```
 
@@ -458,17 +458,17 @@ of a result's wire form (`CheckResult.to_dict()`).
 ## Catalogs and drift
 
 Catalogs are plugins. The built-in `file` catalog reads a YAML file (see `examples/catalog.yaml`).
-For Flowfile, see [`plugins/gloss-flowfile`](plugins/gloss-flowfile).
+For Flowfile, see [`plugins/glosslayer-flowfile`](plugins/glosslayer-flowfile).
 
 ```python
-from gloss.catalogs.file import FileCatalog
-from gloss.sync import sync
+from glosslayer.catalogs.file import FileCatalog
+from glosslayer.sync import sync
 
 report = sync(g, FileCatalog("examples/catalog.yaml"))
 print(report.new)                              # ['shop.orders', 'shop.customers']
 
 # shop.customers came from the catalog without meaning; let Gloss suggest semantic types
-suggested = g.propose_many(gloss.TypeSuggester().proposals(g), source=gloss.TypeSuggester.source_id)
+suggested = g.propose_many(glosslayer.TypeSuggester().proposals(g), source=glosslayer.TypeSuggester.source_id)
 print([(r.assertion.subject, r.assertion.value) for r in suggested])
 # [('field:shop.customers/email', 'email_address')]
 ```
@@ -495,7 +495,7 @@ concludes that a table it cannot see was removed. Run sync as the application it
 
 <!-- not-tested -->
 ```python
-from gloss.sync import sync_asset, asset_moved, asset_removed, write_back
+from glosslayer.sync import sync_asset, asset_moved, asset_removed, write_back
 
 sync_asset(g, catalog, "shop.orders")                         # created, or its columns changed
 asset_moved(g, catalog, "shop.orders", "shop.order_lines")    # renamed, or moved to another schema
@@ -596,7 +596,7 @@ rejected, the same suggestion can't be proposed again.
 ### In your own prompts
 
 ```python
-from gloss import ai
+from glosslayer import ai
 
 context = ai.model_context(g, datasets=["crm.orders", "crm.customers"])   # dict, ready to JSON-dump
 hits = ai.search(g, "revenue")
@@ -624,7 +624,7 @@ gloss serve                    # http://127.0.0.1:8765/docs
 | Operations | `GET /health`, `POST /sync/{catalog}` |
 
 Every route runs as an actor, reads included, and returns only what that actor may see. Responses are
-typed, so `/openapi.json` is a contract; [`gloss.client.Client`](src/gloss/client.py) is a client for it.
+typed, so `/openapi.json` is a contract; [`glosslayer.client.Client`](src/glosslayer/client.py) is a client for it.
 Standalone, the actor comes from the `X-Gloss-Actor` header. That's meant for use behind an
 authenticating proxy; embed it (below) to use your app's own logins.
 
@@ -641,16 +641,16 @@ version it tracks itself, and the host creates or upgrades them from its own mig
 ```python
 # one revision in the host's Alembic chain; run it again whenever you upgrade Gloss
 def upgrade():
-    gloss.schema.upgrade(op.get_bind())        # idempotent: creates the tables or walks them to the latest
+    glosslayer.schema.upgrade(op.get_bind())        # idempotent: creates the tables or walks them to the latest
 
 # and keep them out of the host's own autogenerate
 context.configure(..., include_object=lambda obj, name, type_, *_:
-                  not (type_ == "table" and gloss.schema.is_gloss_table(name)))
+                  not (type_ == "table" and glosslayer.schema.is_gloss_table(name)))
 ```
 
 <!-- not-tested -->
 ```python
-g = gloss.Gloss(gloss.SQLStore(host_engine), policy=HostPolicy())     # the application's own handle
+g = glosslayer.Gloss(glosslayer.SQLStore(host_engine), policy=HostPolicy())     # the application's own handle
 
 with host_engine.begin() as conn, g.store.using(conn):                # or inside a transaction you own
     g.rekey("dataset:shop.orders", "dataset:shop.order_lines", actor=System("catalog"))
@@ -663,10 +663,10 @@ policy lets that actor see, its writes are made as them, and `via` and `context`
 <!-- not-tested -->
 ```python
 from fastapi import Depends, FastAPI
-from gloss import Human
-from gloss.server import create_router
+from glosslayer import Human
+from glosslayer.server import create_router
 
-def ledger(user=Depends(get_current_user)) -> gloss.Gloss:        # the host's auth dependency
+def ledger(user=Depends(get_current_user)) -> glosslayer.Gloss:        # the host's auth dependency
     return g.as_actor(Human(user.id), context={"sign_in": user.sign_in})
 
 app = FastAPI()
@@ -690,11 +690,11 @@ metadata being present (in a frozen application it often is not):
 
 <!-- not-tested -->
 ```python
-gloss.plugins.register("catalog", "mycatalog", MyCatalog)
-gloss.register_attribute("trusted", ["dataset", "metric"], validate=bool)     # extend the vocabulary
+glosslayer.plugins.register("catalog", "mycatalog", MyCatalog)
+glosslayer.register_attribute("trusted", ["dataset", "metric"], validate=bool)     # extend the vocabulary
 ```
 
-The only data file is `gloss/ossie/ossie-schema.json`, needed for `validate()`; include it as package data
+The only data file is `glosslayer/ossie/ossie-schema.json`, needed for `validate()`; include it as package data
 when freezing (PyInstaller: `collect_data_files("gloss")`).
 
 ### Two ledgers as one
@@ -704,7 +704,7 @@ without copying one into the other:
 
 <!-- not-tested -->
 ```python
-from gloss.client import Client, Federation
+from glosslayer.client import Client, Federation
 
 shared = Client("https://hub.example/semantic", headers={"Authorization": f"Bearer {token}"})
 both = Federation({"org.": shared}, default=g.as_actor(Human(user.id)))
@@ -715,15 +715,15 @@ both.propose("field:org.sales.orders/amount", "description", "Order value incl. 
 
 ### Flowfile
 
-The [`gloss-flowfile`](plugins/gloss-flowfile) plugin provides a catalog for Flowfile tables, a lineage
+The [`glosslayer-flowfile`](plugins/glosslayer-flowfile) plugin provides a catalog for Flowfile tables, a lineage
 source that proposes confidentiality, classification and descriptions downstream, and the glue for
 Flowfile's backend: catalog events, per-request views and a policy answered from the user's grants.
 
 <!-- not-tested -->
 ```python
-from gloss_flowfile import Embedded, FlowfileCatalog, LineageSource, policy_for
+from glosslayer_flowfile import Embedded, FlowfileCatalog, LineageSource, policy_for
 
-g = gloss.Gloss(gloss.SQLStore(engine), policy=policy_for(sharing=sharing_enabled()))
+g = glosslayer.Gloss(glosslayer.SQLStore(engine), policy=policy_for(sharing=sharing_enabled()))
 semantics = Embedded(g, FlowfileCatalog(service=unrestricted_catalog_service))
 
 semantics.sync()                                           # as the backend itself, over the whole catalog
@@ -746,7 +746,7 @@ gloss export ossie -o model.yaml --validate [--include-pending] [--dataset crm.]
 yaml_text = g.to_yaml("crm.yaml", name="crm", tables="crm.")   # also written to crm.yaml
 # g.to_yaml(include_pending=True)   # include facts still waiting for review
 
-from gloss.ossie import validate
+from glosslayer.ossie import validate
 
 export = g.to_ossie(name="crm", tables="crm.")  # .document (dict), .warnings, .to_yaml()
 print(validate(export.document))               # []  (valid against the Ossie JSON Schema)
@@ -790,7 +790,7 @@ lists what's installed.
 | Source | `source_id`, `proposals(gloss) -> Iterable[Proposal]` (never accepted facts) | `ossie`, `semantic-types` |
 | Sink | `name`, `publish(gloss, **options)` | `ossie`, `git` |
 | Policy | `can(actor, action, assertion, context)`, `on_propose(actor, source, subject, attribute, context)`, `scope(actor, context)` | `DefaultPolicy`, `RolePolicy` |
-| Attribute | `gloss.register_attribute(name, kinds, validate=…, inherited=…, detail=…, searchable=…)` | everything in the tables above |
+| Attribute | `glosslayer.register_attribute(name, kinds, validate=…, inherited=…, detail=…, searchable=…)` | everything in the tables above |
 | Check | subclass `checks.Check`, `@checks.register` | `not_null`, `unique`, `matches`, … |
 
 Storage is not a seam: the store is SQLAlchemy, on SQLite or Postgres.
@@ -798,7 +798,7 @@ Storage is not a seam: the store is SQLAlchemy, on SQLite or Postgres.
 A catalog in a dozen lines:
 
 ```python
-from gloss.seams import AssetSchema, Column as CatalogColumn, schema_fingerprint
+from glosslayer.seams import AssetSchema, Column as CatalogColumn, schema_fingerprint
 
 class DictCatalog:
     """Tables described by a dict: {table: {column: dtype}}."""
@@ -861,9 +861,9 @@ person's laptop can move to a team later and keep its history:
 | stewarded (`RolePolicy`) | queued | queued | the stewards of that path |
 
 ```python
-from gloss import DefaultPolicy
+from glosslayer import DefaultPolicy
 
-solo = gloss.open("sqlite:///solo.db", policy=DefaultPolicy(mode="solo"))
+solo = glosslayer.open("sqlite:///solo.db", policy=DefaultPolicy(mode="solo"))
 notes = Table("scratch.notes", description="Meeting notes").add_column("taken_at", DateTime())
 print(solo.add(notes, source=Human("me")))        # 2 new, 0 unchanged, 2 accepted
 print(solo.table("scratch.notes").description)    # Meeting notes  (no second step, readable at once)
@@ -892,7 +892,7 @@ In every mode:
 who may read what:
 
 ```python
-from gloss import RolePolicy
+from glosslayer import RolePolicy
 
 policy = RolePolicy(
     admins={"human:edward"},
@@ -900,7 +900,7 @@ policy = RolePolicy(
     reviewers={"human:carol"},                                       # may review, not accept
     readers={"finance.": {"human:carol"}},                           # leave out: everyone reads everything
 )
-governed = gloss.open("sqlite:///governed.db", policy=policy)
+governed = glosslayer.open("sqlite:///governed.db", policy=policy)
 governed.add(
     Table("finance.invoices", description="One row per invoice").add_column("total", Decimal(18, 2)),
     Table("crm.leads").add_column("score", Int(32)),
@@ -926,7 +926,7 @@ class GrantsPolicy(DefaultPolicy):
             assertion.scope_path == p or (assertion.scope_path or "").startswith(p + ".") for p in paths
         )
 
-granted = gloss.open("sqlite:///granted.db", policy=GrantsPolicy())
+granted = glosslayer.open("sqlite:///granted.db", policy=GrantsPolicy())
 fact = granted.propose("dataset:crm.leads", "description", "Inbound leads", source=AI("claude"))
 bob = granted.as_actor(Human("bob"), context={"manages": ["crm"]})
 print(bob.accept(fact.id).status.value)           # accepted
@@ -957,7 +957,7 @@ print(solo.history("dataset:scratch.minutes")[-1].type.value)                # r
 - If the new name already has an accepted value for an attribute, that one stays and the moved one is
   superseded (and can be restored).
 
-Catalog plugins report renames (`gloss.sync.asset_moved`); a pull sync also recognises one when the
+Catalog plugins report renames (`glosslayer.sync.asset_moved`); a pull sync also recognises one when the
 catalog gives tables an id and the columns are unchanged.
 
 ## Performance
@@ -982,7 +982,7 @@ SQLite on a laptop, 10,000 tables × 10 columns (325k facts, 650k events). Repro
 ## Project layout
 
 ```
-src/gloss/
+src/glosslayer/
   ids.py            subjects, namespaces, path prefixes
   model.py          assertions, events, statuses, the attribute registry, confidentiality
   ledger.py         the Gloss facade: propose / decide / re-key / read / search, and actor-bound views
@@ -1009,7 +1009,7 @@ src/gloss/
   client.py         REST client, and several ledgers as one
   viz.py            Mermaid ER diagram, progress table, HTML report
   cli.py            the gloss command
-plugins/gloss-flowfile/   Flowfile catalog, lineage source, backend glue
+plugins/glosslayer-flowfile/   Flowfile catalog, lineage source, backend glue
 docs/architecture.md      design decisions
 examples/                 catalog and Ossie model used in this README, and e2e_shop.py
 ```

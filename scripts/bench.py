@@ -14,11 +14,11 @@ import os
 import statistics
 import time
 
-import gloss
-from gloss import Human, ai
-from gloss.ossie import to_ossie
-from gloss.seams import AssetSchema, Column, schema_fingerprint
-from gloss.sync import sync
+import glosslayer
+from glosslayer import Human, ai
+from glosslayer.ossie import to_ossie
+from glosslayer.seams import AssetSchema, Column, schema_fingerprint
+from glosslayer.sync import sync
 
 
 class SyntheticCatalog:
@@ -61,14 +61,14 @@ def main() -> None:
         if os.path.exists(args.db + suffix):
             os.remove(args.db + suffix)
 
-    g = gloss.open(f"sqlite:///{args.db}")
+    g = glosslayer.open(f"sqlite:///{args.db}")
     n = args.tables
     print(f"{n} tables x 10 columns -> {args.db}")
     timed("first sync", lambda: sync(g, SyntheticCatalog(n)))
     timed("resync, unchanged", lambda: sync(g, SyntheticCatalog(n)))
     timed("resync, 10% changed", lambda: sync(g, SyntheticCatalog(n, changed=True)))
     timed("list pending", lambda: g.pending(), reps=5)
-    timed("bulk accept descriptions", lambda: g.bulk("accept", gloss.Query(attribute="description"), actor=Human("bench")))
+    timed("bulk accept descriptions", lambda: g.bulk("accept", glosslayer.Query(attribute="description"), actor=Human("bench")))
     timed("search 'c7' (matches every table)", lambda: ai.search(g, "c7"), reps=30)
     timed("search 'db t42'", lambda: ai.search(g, "db t42"), reps=30)
     timed("search, no match", lambda: ai.search(g, "zebra"), reps=30)

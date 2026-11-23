@@ -2,9 +2,9 @@
 
 import pytest
 
-import gloss
-from gloss import AI, Column, Confidentiality, DefaultPolicy, Human, Relationship, RolePolicy, Table
-from gloss import PermissionDenied, Status
+import glosslayer
+from glosslayer import AI, Column, Confidentiality, DefaultPolicy, Human, Relationship, RolePolicy, Table
+from glosslayer import PermissionDenied, Status
 
 
 @pytest.fixture
@@ -14,7 +14,7 @@ def ledger():
         stewards={"sales.": {"human:alice"}, "hr.": {"human:bob"}},
         readers={"sales.": {"human:carol"}},
     )
-    with gloss.open("sqlite://", policy=policy) as g:
+    with glosslayer.open("sqlite://", policy=policy) as g:
         orders = Table("sales.orders", description="One row per order",
                        primary_key=[Column("order_id", int)])
         orders.add_columns(Column("employee_id", int), Column("amount", float, description="Order value"))
@@ -68,7 +68,7 @@ def test_stewards_and_admins_read_their_own(ledger):
 
 def test_confidentiality_applies_to_every_reader_below_the_level():
     policy = DefaultPolicy(human_max=Confidentiality.INTERNAL)
-    with gloss.open("sqlite://", policy=policy) as g:
+    with glosslayer.open("sqlite://", policy=policy) as g:
         t = Table("hr.employees", primary_key=[Column("employee_id", int)])
         t.add_columns(Column("salary", float, description="Gross yearly salary", confidentiality="restricted"),
                       Column("team", str, description="Team name"))
@@ -109,7 +109,7 @@ def test_ai_scope_and_a_person_working_through_an_agent(ledger):
 
 
 def test_ai_views_report_what_they_handed_out(ledger):
-    from gloss import ai
+    from glosslayer import ai
 
     seen = []
     stop = ledger.on_read(seen.append)
@@ -128,7 +128,7 @@ def test_rest_reads_are_scoped(ledger):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
-    from gloss.server import create_app
+    from glosslayer.server import create_app
 
     c = TestClient(create_app(ledger))
     carol, root = {"X-Gloss-Actor": "human:carol"}, {"X-Gloss-Actor": "human:root"}
@@ -149,9 +149,9 @@ def test_router_takes_a_bound_view_from_the_host(ledger):
     from fastapi import FastAPI, Header
     from fastapi.testclient import TestClient
 
-    from gloss.server import create_router
+    from glosslayer.server import create_router
 
-    def host_ledger(x_user: str = Header()) -> gloss.Gloss:  # the host's own auth, with its own context
+    def host_ledger(x_user: str = Header()) -> glosslayer.Gloss:  # the host's own auth, with its own context
         return ledger.as_actor(Human(x_user), via="server:test", context={"sign_in": "direct"})
 
     app = FastAPI()

@@ -3,7 +3,7 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "gloss-semantics"
+name = "glosslayer"
 version = "0.1.0.dev0"
 description = "A catalog-agnostic semantic layer: track, review, visualize and serve Apache Ossie semantic models."
 readme = "README.md"
@@ -33,32 +33,32 @@ checks = ["polars>=1.0"]
 postgres = ["psycopg[binary]>=3.1"]
 server = ["fastapi>=0.110", "uvicorn>=0.29"]
 mcp = ["mcp>=1.2"]
-all = ["gloss-semantics[validate,checks,postgres,server,mcp]"]
-dev = ["gloss-semantics[validate,checks,server,mcp]", "pytest>=8", "httpx>=0.27", "ruff>=0.6"]
+all = ["glosslayer[validate,checks,postgres,server,mcp]"]
+dev = ["glosslayer[validate,checks,server,mcp]", "pytest>=8", "httpx>=0.27", "ruff>=0.6"]
 
 [project.scripts]
-gloss = "gloss.cli:main"
+gloss = "glosslayer.cli:main"
 
 # Built-in plugins are registered through the same entry points third parties use.
 [project.entry-points."gloss.catalogs"]
-file = "gloss.catalogs.file:FileCatalog"
+file = "glosslayer.catalogs.file:FileCatalog"
 
 [project.entry-points."gloss.sources"]
-ossie = "gloss.ossie.importer:OssieSource"
-semantic-types = "gloss.semantic:TypeSuggester"
+ossie = "glosslayer.ossie.importer:OssieSource"
+semantic-types = "glosslayer.semantic:TypeSuggester"
 
 [project.entry-points."gloss.sinks"]
-ossie = "gloss.ossie.exporter:OssieSink"
-git = "gloss.sinks:GitSink"
+ossie = "glosslayer.ossie.exporter:OssieSink"
+git = "glosslayer.sinks:GitSink"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/gloss"]
+packages = ["src/glosslayer"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src", "tests", "examples", "docs", "scripts", "README.md", "CHANGELOG.md", "LICENSE", "NOTICE"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "plugins/gloss-flowfile/tests"]
+testpaths = ["tests", "plugins/glosslayer-flowfile/tests"]
 
 [tool.ruff]
 line-length = 110

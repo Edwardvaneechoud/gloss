@@ -1,6 +1,6 @@
 """Value types shared by the store and its callers.
 
-The store itself is SQLAlchemy (:class:`gloss.store.sql.SQLStore`, on SQLite or Postgres).
+The store itself is SQLAlchemy (:class:`glosslayer.store.sql.SQLStore`, on SQLite or Postgres).
 There is no pluggable storage protocol: the ledger relies on transactions, indexes and a
 search index that only a relational store provides, and one tested implementation is more
 honest than a seam nobody exercises.

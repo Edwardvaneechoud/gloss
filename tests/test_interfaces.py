@@ -5,11 +5,11 @@ import subprocess
 
 import pytest
 
-import gloss
-from gloss import plugins
-from gloss.cli import main
-from gloss.ossie import OssieSource
-from gloss.viz import html_report, mermaid_er
+import glosslayer
+from glosslayer import plugins
+from glosslayer.cli import main
+from glosslayer.ossie import OssieSource
+from glosslayer.viz import html_report, mermaid_er
 
 
 def test_cli_end_to_end(tmp_path, examples, capsys, monkeypatch):
@@ -35,7 +35,7 @@ def test_cli_end_to_end(tmp_path, examples, capsys, monkeypatch):
 
 def test_viz(g, examples):
     g.propose_many(OssieSource(examples / "semantic_model.yaml").proposals(), source="import:ossie")
-    g.bulk("accept", gloss.Query(dataset="orders"), actor="human:a")
+    g.bulk("accept", glosslayer.Query(dataset="orders"), actor="human:a")
     er = mermaid_er(g)
     assert er.startswith("erDiagram")
     assert "Decimal amount" in er
@@ -56,7 +56,7 @@ def test_rest_api(g, examples):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
-    from gloss.server import create_app
+    from glosslayer.server import create_app
 
     c = TestClient(create_app(g))
     H = {"X-Gloss-Actor": "human:alice"}
@@ -84,7 +84,7 @@ def test_rest_api(g, examples):
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
 def test_git_sink(g, examples, tmp_path):
-    from gloss.sinks import GitSink
+    from glosslayer.sinks import GitSink
 
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -92,7 +92,7 @@ def test_git_sink(g, examples, tmp_path):
     subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@example.com"], check=True)
     subprocess.run(["git", "-C", str(repo), "config", "user.name", "t"], check=True)
     g.propose_many(OssieSource(examples / "semantic_model.yaml").proposals(), source="import:ossie")
-    g.bulk("accept", gloss.Query(), actor="human:a")
+    g.bulk("accept", glosslayer.Query(), actor="human:a")
     GitSink(repo, "models/shop.yaml").publish(g)
     log = subprocess.run(["git", "-C", str(repo), "log", "--oneline"], capture_output=True, text=True).stdout
     assert "publish semantic model (log seq" in log

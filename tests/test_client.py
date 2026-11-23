@@ -2,9 +2,9 @@
 
 import pytest
 
-import gloss
-from gloss import Column, Human, PermissionDenied, Proposal, Relationship, RolePolicy, Status, Table
-from gloss.client import Client, Federation
+import glosslayer
+from glosslayer import Column, Human, PermissionDenied, Proposal, Relationship, RolePolicy, Status, Table
+from glosslayer.client import Client, Federation
 
 pytest.importorskip("fastapi")
 
@@ -12,7 +12,7 @@ pytest.importorskip("fastapi")
 def _client(ledger, actor, catalogs=None):
     from fastapi.testclient import TestClient
 
-    from gloss.server import create_app
+    from glosslayer.server import create_app
 
     http = TestClient(create_app(ledger, catalogs=catalogs))
 
@@ -29,7 +29,7 @@ def _client(ledger, actor, catalogs=None):
 @pytest.fixture
 def hub():
     policy = RolePolicy(admins={"human:root"}, stewards={"org.": {"human:ann"}}, readers={"org.": {"human:me"}})
-    with gloss.open("sqlite://", policy=policy) as g:
+    with glosslayer.open("sqlite://", policy=policy) as g:
         orders = Table("org.sales.orders", description="One row per order", primary_key=[Column("order_id", int)])
         orders.add_columns(Column("customer_id", int), Column("amount", float, description="Order value"))
         customers = Table("org.sales.customers", primary_key=[Column("customer_id", int)])
@@ -56,7 +56,7 @@ def test_client_reads_and_proposes(hub):
         me.get("0" * 32)
     with pytest.raises(ValueError):
         me.propose("field:org.sales.orders/amount", "datatype", "Money")
-    with pytest.raises(gloss.InvalidTransition):
+    with pytest.raises(glosslayer.InvalidTransition):
         ann.accept(a.id)
 
 
@@ -80,8 +80,8 @@ def test_client_groups_bulk_and_versions(hub):
 
 
 def test_check_results_and_sync_over_rest(hub):
-    from gloss.catalogs.file import FileCatalog
-    from gloss.checks import CheckResult, not_null
+    from glosslayer.catalogs.file import FileCatalog
+    from glosslayer.checks import CheckResult, not_null
 
     worker = _client(hub, "system:worker-1")
     run = worker.record_check_results(
@@ -103,7 +103,7 @@ def test_check_results_and_sync_over_rest(hub):
 
 
 def test_two_ledgers_as_one(hub):
-    with gloss.open("sqlite://", policy=gloss.DefaultPolicy(mode="solo")) as local:
+    with glosslayer.open("sqlite://", policy=glosslayer.DefaultPolicy(mode="solo")) as local:
         mine = Table("scratch.notes", description="My notes").add_column("note", str)
         local.add(mine, source=Human("me"))
         both = Federation({"org.": _client(hub, "human:me")}, default=local.as_actor(Human("me")))

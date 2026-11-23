@@ -5,7 +5,7 @@ Source    produces proposals (never accepted facts). Imports, profilers, lineage
 Sink      publishes the accepted state somewhere. Ossie files, git, back into a catalog.
 
 Implementations are plain classes; they do not need to inherit from anything.
-They are registered in code or discovered through Python entry points (see :mod:`gloss.plugins`).
+They are registered in code or discovered through Python entry points (see :mod:`glosslayer.plugins`).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class Column:
     """One column as a catalog describes it."""
     name: str
-    dtype: str  # the catalog's own type name; mapped to an Ossie datatype by gloss.types
+    dtype: str  # the catalog's own type name; mapped to an Ossie datatype by glosslayer.types
     nullable: bool | None = None
     description: str | None = None
 
@@ -103,7 +103,7 @@ class Catalog(Protocol):
     A catalog may define ``coverage() -> Coverage`` to say what its listing speaks for. Without it
     the listing is taken as complete. Removal is only ever inferred inside that coverage; a catalog
     that knows the moment something is deleted or renamed should report it instead
-    (``gloss.sync.asset_removed`` / ``asset_moved``).
+    (``glosslayer.sync.asset_removed`` / ``asset_moved``).
     """
 
     name: str

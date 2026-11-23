@@ -25,12 +25,12 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from gloss import Gloss, Human
-from gloss.actors import actor_kind, split_actor
-from gloss.ids import path_covers
-from gloss.model import Assertion
-from gloss.policy import SOLO, TEAM, Context, DefaultPolicy
-from gloss.sync import SyncReport, asset_moved, asset_removed, sync, sync_asset, write_back
+from glosslayer import Gloss, Human
+from glosslayer.actors import actor_kind, split_actor
+from glosslayer.ids import path_covers
+from glosslayer.model import Assertion
+from glosslayer.policy import SOLO, TEAM, Context, DefaultPolicy
+from glosslayer.sync import SyncReport, asset_moved, asset_removed, sync, sync_asset, write_back
 
 
 def actor_for(user_id: Any) -> Human:
@@ -74,7 +74,7 @@ class FlowfilePolicy(DefaultPolicy):
             return False
         target = self._attrs(context).get("to")
         if target:
-            from gloss.ids import SubjectId
+            from glosslayer.ids import SubjectId
 
             return self._manages(context, SubjectId.parse(target).scope_path)
         return True

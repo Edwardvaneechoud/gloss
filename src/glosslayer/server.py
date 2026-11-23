@@ -3,9 +3,9 @@
 Every route, reads included, runs as an actor: the host says who is asking, the policy
 decides what they see and may do. Mounted in a host with its own logins:
 
-    from gloss.server import create_router
+    from glosslayer.server import create_router
 
-    def ledger(user=Depends(get_current_user)) -> gloss.Gloss:      # one bound view per request
+    def ledger(user=Depends(get_current_user)) -> glosslayer.Gloss:      # one bound view per request
         return g.as_actor(Human(user.id), context={"sign_in": user.sign_in})
 
     app.include_router(create_router(ledger), prefix="/semantic")
@@ -18,7 +18,7 @@ Standalone, the actor comes from the ``X-Gloss-Actor`` header. That is fine
 behind an authenticating proxy and not for direct exposure.
 
 Responses are typed, so the OpenAPI schema is a contract a client can be generated from
-(:mod:`gloss.client` is one).
+(:mod:`glosslayer.client` is one).
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ try:
     from fastapi.responses import HTMLResponse, PlainTextResponse
     from pydantic import BaseModel, Field
 except ImportError as exc:  # pragma: no cover
-    raise RuntimeError("The server needs the 'server' extra: pip install gloss-semantics[server]") from exc
+    raise RuntimeError("The server needs the 'server' extra: pip install glosslayer[server]") from exc
 
 ACTIONS = ("review", "accept", "reject", "retract", "reopen", "restore")
 
@@ -419,7 +419,7 @@ def create_router(
     @r.get("/health", response_model=HealthOut)
     def health() -> Any:
         """Liveness check."""
-        return {"ok": True, "schema_version": __import__("gloss").schema.LATEST}
+        return {"ok": True, "schema_version": __import__("glosslayer").schema.LATEST}
 
     @r.get("/assertions", response_model=AssertionPage)
     def list_assertions(
@@ -685,6 +685,6 @@ def create_router(
 def create_app(gloss: Gloss | Callable[..., Gloss], *, actor: Callable[..., str] = header_actor,
                catalogs: Mapping[str, Any] | None = None) -> FastAPI:
     """A standalone FastAPI app serving :func:`create_router` at the root."""
-    app = FastAPI(title="Gloss", version=__import__("gloss").__version__)
+    app = FastAPI(title="Gloss", version=__import__("glosslayer").__version__)
     app.include_router(create_router(gloss, actor=actor, catalogs=catalogs))
     return app

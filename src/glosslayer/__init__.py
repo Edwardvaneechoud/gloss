@@ -1,9 +1,9 @@
 """Gloss: a catalog-agnostic semantic layer built on Apache Ossie.
 
-    import gloss
-    from gloss import Table, Column, Human, Int, String
+    import glosslayer
+    from glosslayer import Table, Column, Human, Int, String
 
-    g = gloss.open("sqlite:///gloss.db")
+    g = glosslayer.open("sqlite:///gloss.db")
     t = Table("shop.returns", primary_key=[Column("return_id", Int(32))])
     t.add_columns(Column("reason", String(255)))
     g.add(t, source=Human("alice"))

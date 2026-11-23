@@ -3,9 +3,9 @@
 import pytest
 import yaml
 
-import gloss
-from gloss import Column, Decimal, Human, Int, Metric, Relationship, SemanticType, String, Table
-from gloss.ossie import validate
+import glosslayer
+from glosslayer import Column, Decimal, Human, Int, Metric, Relationship, SemanticType, String, Table
+from glosslayer.ossie import validate
 
 ED = Human("edward")
 
@@ -54,7 +54,7 @@ def test_readers_with_pending(proposed):
 
 def test_readers_after_accepting(proposed):
     g = proposed
-    g.bulk("accept", gloss.Query(), actor=Human("alice"))
+    g.bulk("accept", glosslayer.Query(), actor=Human("alice"))
     assert len(g.tables()) == 2 and g.relationship("orders_customers").to_table == "crm.customers"
     assert g.semantic_types()[0].name == "email_address"
     t = g.tables()[0]
@@ -70,7 +70,7 @@ def test_yaml(proposed, tmp_path):
     g.to_yaml(tmp_path / "crm.yaml", include_pending=True, tables="crm.orders", name="crm")
     only = yaml.safe_load((tmp_path / "crm.yaml").read_text())
     assert only["name"] == "crm" and [d["name"] for d in only["datasets"]] == ["orders"]
-    g.bulk("accept", gloss.Query(), actor=Human("alice"))
+    g.bulk("accept", glosslayer.Query(), actor=Human("alice"))
     assert g.to_ossie().warnings == [] and "datasets:" in g.to_yaml()
 
 
@@ -81,7 +81,7 @@ def test_subscript_access(proposed):
     with pytest.raises(KeyError, match="Nothing known"):
         g["crm.nope"]
     assert "crm.customers" not in g
-    g.bulk("accept", gloss.Query(), actor=Human("alice"))
+    g.bulk("accept", glosslayer.Query(), actor=Human("alice"))
     assert g["crm.customers"].key == "crm.customers" and "crm.customers" in g
     assert g["dataset:crm.customers"].key == "crm.customers"
     assert g["field:crm.customers/email"].semantic_type.name == "email_address"

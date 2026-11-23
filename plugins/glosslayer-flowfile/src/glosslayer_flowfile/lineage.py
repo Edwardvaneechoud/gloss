@@ -27,14 +27,14 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
-from gloss.ids import SubjectId
-from gloss.ledger import Proposal
-from gloss.model import Confidentiality, Status
+from glosslayer.ids import SubjectId
+from glosslayer.ledger import Proposal
+from glosslayer.model import Confidentiality, Status
 
 from .catalog import FlowfileCatalog, _get
 
 if TYPE_CHECKING:
-    from gloss.ledger import Gloss
+    from glosslayer.ledger import Gloss
 
 _ATTRS = ("confidentiality", "classification", "description")
 

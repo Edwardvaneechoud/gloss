@@ -1,7 +1,7 @@
 """The Gloss facade: the one object hosts embed.
 
-    import gloss
-    g = gloss.open("sqlite:///gloss.db")
+    import glosslayer
+    g = glosslayer.open("sqlite:///gloss.db")
     a = g.propose("field:sales.orders/amount", "description", "Order value incl. VAT",
                   source="ai:claude", confidence=0.8)
     g.accept(a.id, actor="human:alice")
@@ -982,7 +982,7 @@ class Gloss:
 
     # ------------------------------------------------------------- read as objects
     def table(self, key: str, *, include_pending: bool = False) -> Any:
-        """One table as a :class:`gloss.Table` (columns, keys, semantic types, its metrics).
+        """One table as a :class:`glosslayer.Table` (columns, keys, semantic types, its metrics).
 
         Readers return accepted facts by default; ``include_pending=True`` adds open proposals.
         """
@@ -1048,7 +1048,7 @@ class Gloss:
         return [Table._from_state(key, state, types) for key in sorted(state.datasets)]
 
     def semantic_type(self, name: str, *, include_pending: bool = False) -> Any:
-        """One semantic type as a :class:`gloss.SemanticType`; ``name`` may be ``"crm::email_address"``."""
+        """One semantic type as a :class:`glosslayer.SemanticType`; ``name`` may be ``"crm::email_address"``."""
         from .modeling import SemanticType
 
         return SemanticType.load(self, name, include_pending=include_pending)
@@ -1076,7 +1076,7 @@ class Gloss:
         return self._with_versions(out)
 
     def relationship(self, name: str, *, include_pending: bool = False) -> Any:
-        """One relationship as a :class:`gloss.Relationship`; ``name`` may be ``"sales::orders_customers"``."""
+        """One relationship as a :class:`glosslayer.Relationship`; ``name`` may be ``"sales::orders_customers"``."""
         from .modeling import read_statuses, relationship_from_attrs
 
         sid = SubjectId.for_relationship(name)
@@ -1087,7 +1087,7 @@ class Gloss:
         return self._with_versions([rel])[0]
 
     def metrics(self, table: str | None = None, *, include_pending: bool = False) -> list[Any]:
-        """Metrics as :class:`gloss.Metric`: ledger-wide and namespace ones, plus every table's own.
+        """Metrics as :class:`glosslayer.Metric`: ledger-wide and namespace ones, plus every table's own.
 
         With ``table`` only that table's metrics are returned.
         """
@@ -1160,7 +1160,7 @@ class Gloss:
         return self._redact([self._require(assertion_id)])[0]
 
     def find(self, **criteria: Any) -> list[Assertion]:
-        """Assertions matching :class:`~gloss.store.Query` criteria, within this reader's scope and redacted.
+        """Assertions matching :class:`~glosslayer.store.Query` criteria, within this reader's scope and redacted.
 
         For example ``subject=``, ``dataset=``, ``attribute=``, ``statuses=``, ``limit=``.
         """
@@ -1223,7 +1223,7 @@ class Gloss:
 
     def record_check_results(self, results: Iterable[Any], *, runner: str = "system:checks",
                              run_id: str | None = None) -> str:
-        """Log a run of data quality checks (see gloss.checks). Returns the run id.
+        """Log a run of data quality checks (see glosslayer.checks). Returns the run id.
 
         Pass the host's own ``run_id`` to tie the results to the run that produced them.
         """

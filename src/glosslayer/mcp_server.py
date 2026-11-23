@@ -1,6 +1,6 @@
 """MCP server: lets AI agents read the accepted model and propose changes.
 
-AI can *read* (with confidentiality enforced by :mod:`gloss.ai`) and *propose*.
+AI can *read* (with confidentiality enforced by :mod:`glosslayer.ai`) and *propose*.
 It can never accept: proposals land in the review queue as ``ai:<agent>``.
 
     gloss mcp --db sqlite:///gloss.db --agent claude
@@ -44,7 +44,7 @@ def _server_class() -> Any:
 
             return FastMCP
         except ImportError as exc:
-            raise RuntimeError("The MCP server needs the 'mcp' extra: pip install gloss-semantics[mcp]") from exc
+            raise RuntimeError("The MCP server needs the 'mcp' extra: pip install glosslayer[mcp]") from exc
 
 
 def build_server(gloss: Gloss, *, agent: str = "assistant") -> Any:

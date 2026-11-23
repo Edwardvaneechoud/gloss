@@ -2,8 +2,8 @@
 
 import pytest
 
-import gloss
-from gloss import Column, Human, SemanticType, String, Table, checks
+import glosslayer
+from glosslayer import Column, Human, SemanticType, String, Table, checks
 
 pl = pytest.importorskip("polars")
 
@@ -89,4 +89,4 @@ def test_effective_checks_reads_one_table(model, monkeypatch):
 
 
 def test_gloss_is_importable_without_polars_for_plans():
-    assert callable(gloss.checks.polars_plan)
+    assert callable(glosslayer.checks.polars_plan)

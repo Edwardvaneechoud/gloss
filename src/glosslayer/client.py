@@ -1,11 +1,11 @@
 """A client for a Gloss ledger served over REST, and a way to use two ledgers as one.
 
-    remote = gloss.client.Client("https://hub.example/semantic", headers={"Authorization": "Bearer …"})
+    remote = glosslayer.client.Client("https://hub.example/semantic", headers={"Authorization": "Bearer …"})
     remote.search("revenue")
     remote.propose("field:main.sales.orders/amount", "description", "Order value incl. VAT")
 
-``Client`` mirrors the reading and proposing half of :class:`gloss.Gloss` against the routes of
-:mod:`gloss.server`. Who you are is decided by the server from your credentials, so no call takes
+``Client`` mirrors the reading and proposing half of :class:`glosslayer.Gloss` against the routes of
+:mod:`glosslayer.server`. Who you are is decided by the server from your credentials, so no call takes
 an actor.
 
 ``Federation`` presents several ledgers as one, each owning a path prefix: an application's own
@@ -81,7 +81,7 @@ def _clean(params: Mapping[str, Any]) -> dict[str, Any]:
 
 
 class Client:
-    """A ledger served by :mod:`gloss.server`, used like an actor-bound ``Gloss`` view.
+    """A ledger served by :mod:`glosslayer.server`, used like an actor-bound ``Gloss`` view.
 
     Error answers come back as the local exceptions: 403 as ``PermissionDenied``, 404 as ``KeyError``,
     422 as ``InvalidTransition`` or ``ValueError``, anything else (409 included) as ``RemoteError``.

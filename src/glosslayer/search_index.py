@@ -121,7 +121,7 @@ def build_rows(gloss: Gloss, subjects: Iterable[str]) -> list[dict[str, Any]]:
     """Index rows for ``subjects`` from their accepted facts; a subject without any gets no row.
 
     Fields take inherited attributes from their semantic type, and levels are inherited as in
-    :mod:`gloss.visibility`.
+    :mod:`glosslayer.visibility`.
     """
     subjects = set(subjects)
     attrs: dict[str, dict[str, Any]] = defaultdict(dict)

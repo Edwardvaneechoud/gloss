@@ -1,8 +1,8 @@
-from gloss import Status
-from gloss.catalogs.file import FileCatalog
-from gloss.ossie import OssieSource
-from gloss.sync import sync
-from gloss.types import to_ossie_datatype
+from glosslayer import Status
+from glosslayer.catalogs.file import FileCatalog
+from glosslayer.ossie import OssieSource
+from glosslayer.sync import sync
+from glosslayer.types import to_ossie_datatype
 
 
 def test_type_mapping():
@@ -41,7 +41,7 @@ def test_resync_unchanged_is_noop(g, examples):
 def test_drift_marks_facts_stale(g, examples):
     sync(g, FileCatalog(examples / "catalog.yaml"))
     g.propose_many(OssieSource(examples / "semantic_model.yaml", key_by="source").proposals(), source="import:ossie")
-    g.bulk("accept", __import__("gloss").Query(source_prefix="import:"), actor="human:a")
+    g.bulk("accept", __import__("glosslayer").Query(source_prefix="import:"), actor="human:a")
 
     rep = sync(g, FileCatalog(examples / "catalog_v2.yaml"))
     assert rep.changed == ["shop.orders"]
@@ -93,7 +93,7 @@ def test_precise_type_change_is_recorded_without_review(g, tmp_path, examples):
 
 
 def test_logical_type_change_sends_semantic_type_and_checks_back(g, tmp_path, examples):
-    from gloss import Column, Human, SemanticType, String, Table, checks
+    from glosslayer import Column, Human, SemanticType, String, Table, checks
 
     p = tmp_path / "cat.yaml"
     p.write_text((examples / "catalog.yaml").read_text())

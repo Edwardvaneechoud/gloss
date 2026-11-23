@@ -6,10 +6,10 @@ and a restricted one lists only what its user may see.
 
 import pytest
 
-import gloss
-from gloss import AI, PermissionDenied, Status
-from gloss.sync import sync
-from gloss_flowfile import Directory, Embedded, FlowfileCatalog, LineageSource, actor_for, policy_for
+import glosslayer
+from glosslayer import AI, PermissionDenied, Status
+from glosslayer.sync import sync
+from glosslayer_flowfile import Directory, Embedded, FlowfileCatalog, LineageSource, actor_for, policy_for
 
 
 def _table(id, name, cols, *, produced_by=None, read_by=(), description=None, source="local"):
@@ -61,7 +61,7 @@ def test_catalog_seam_embedded():
     assert cat.coverage().complete
     schema = cat.describe("main.mart.customers_clean")
     assert schema.extra["produced_by_flow"] == "flow_7" and schema.uid == "2"
-    with gloss.open("sqlite://") as g:
+    with glosslayer.open("sqlite://") as g:
         rep = sync(g, cat)
         assert len(rep.new) == 2
         assert g.current("field:main.raw.customers/customer_id")["datatype"] == "Integer"
@@ -71,7 +71,7 @@ def test_catalog_seam_embedded():
 
 def test_a_users_listing_never_marks_other_users_tables_gone():
     tables = make_tables()
-    with gloss.open("sqlite://") as g:
+    with glosslayer.open("sqlite://") as g:
         sync(g, FlowfileCatalog(service=FakeService(tables)))  # the backend's own, unrestricted sync
         bobs = g.propose("dataset:main.mart.customers_clean", "description", "Bob's mart", source="human:2")
         g.accept(bobs.id, actor="human:2")
@@ -90,7 +90,7 @@ def test_hub_rows_are_not_copied_into_the_local_ledger():
     tables = make_tables() + [_table(-5, "org.finance.invoices", [("total", "Float64")], source="hub")]
     cat = FlowfileCatalog(service=FakeService(tables))
     assert "org.finance.invoices" not in cat.list_assets()
-    with gloss.open("sqlite://") as g:
+    with glosslayer.open("sqlite://") as g:
         sync(g, cat)
         assert g.find(dataset="org.finance.invoices") == []
 
@@ -98,7 +98,7 @@ def test_hub_rows_are_not_copied_into_the_local_ledger():
 def test_backend_events_keep_meaning_with_the_table():
     tables = make_tables()
     svc = FakeService(tables)
-    with gloss.open("sqlite://", policy=policy_for(sharing=False)) as g:
+    with glosslayer.open("sqlite://", policy=policy_for(sharing=False)) as g:
         semantics = Embedded(g, FlowfileCatalog(service=svc))
         semantics.sync()
         me = semantics.view(user_id=1)
@@ -125,7 +125,7 @@ def test_backend_events_keep_meaning_with_the_table():
 
 
 def test_policy_from_request_context():
-    with gloss.open("sqlite://", policy=policy_for(sharing=True)) as g:
+    with glosslayer.open("sqlite://", policy=policy_for(sharing=True)) as g:
         semantics = Embedded(g, FlowfileCatalog(service=FakeService(make_tables())), own_descriptions=False)
         semantics.sync()
         alice = semantics.view(user_id="u-alice", manage=["main.raw"], read=["main.raw"])
@@ -158,7 +158,7 @@ def test_actors_are_ids_and_names_come_from_the_host():
 
 def test_lineage_propagates_confidentiality_and_descriptions():
     cat = FlowfileCatalog(service=FakeService(make_tables()))
-    with gloss.open("sqlite://") as g:
+    with glosslayer.open("sqlite://") as g:
         sync(g, cat)
         for attr, val in (("confidentiality", "restricted"), ("classification", ["pii.email"]),
                           ("description", "Login e-mail")):
@@ -186,7 +186,7 @@ def test_lineage_reads_in_batches(monkeypatch):
     wide = [(f"c{i}", "Utf8") for i in range(40)]
     tables = [_table(1, "main.raw.wide", wide, read_by=[7]), _table(2, "main.mart.wide", wide, produced_by=7)]
     cat = FlowfileCatalog(service=FakeService(tables))
-    with gloss.open("sqlite://") as g:
+    with glosslayer.open("sqlite://") as g:
         sync(g, cat)
         calls = []
         for name in ("find", "find_for_subjects", "get", "get_many"):

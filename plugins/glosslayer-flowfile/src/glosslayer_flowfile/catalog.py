@@ -29,7 +29,7 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any
 
-from gloss.seams import AssetSchema, Column, Coverage, asset_fingerprint
+from glosslayer.seams import AssetSchema, Column, Coverage, asset_fingerprint
 
 
 def _get(obj: Any, name: str, default: Any = None) -> Any:
@@ -144,7 +144,7 @@ class FlowfileCatalog:
             source=key,
             extra={k: v for k, v in extra.items() if v is not None},
             # Flowfile's ids can be reused after a delete, so sync only trusts them together with
-            # unchanged columns; report renames directly where possible (gloss.sync.asset_moved).
+            # unchanged columns; report renames directly where possible (glosslayer.sync.asset_moved).
             uid=str(tid) if tid is not None else None,
         )
 

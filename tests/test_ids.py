@@ -1,6 +1,6 @@
 import pytest
 
-from gloss.ids import Kind, SubjectId
+from glosslayer.ids import Kind, SubjectId
 
 
 @pytest.mark.parametrize(

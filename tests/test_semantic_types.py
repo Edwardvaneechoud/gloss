@@ -5,10 +5,10 @@ from typing import ClassVar
 
 import pytest
 
-import gloss
-from gloss import Column, Human, Int, SemanticType, String, Table, TypeSuggester, ai, checks
-from gloss.checks import Check, run_polars, to_sql
-from gloss.ossie import OssieSource, to_ossie, validate
+import glosslayer
+from glosslayer import Column, Human, Int, SemanticType, String, Table, TypeSuggester, ai, checks
+from glosslayer.checks import Check, run_polars, to_sql
+from glosslayer.ossie import OssieSource, to_ossie, validate
 
 EMAIL_RX = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 ED = Human("edward")
@@ -106,17 +106,17 @@ def test_ossie_round_trip_keeps_types_without_duplicating(model):
     assert ext["semantic_type"] == "email_address" and "confidentiality" in ext["inherited"]
     assert doc["nonportable_extensions"][0]["data"]["types"]["email_address"]["confidentiality"] == "restricted"
 
-    with gloss.open("sqlite://") as g2:
+    with glosslayer.open("sqlite://") as g2:
         g2.propose_many(OssieSource(doc).proposals(), source="import:ossie")
-        g2.bulk("accept", gloss.Query(), actor=ED)
+        g2.bulk("accept", glosslayer.Query(), actor=ED)
         assert "confidentiality" not in g2.current("field:leads/contact_email")  # not copied onto the field
         assert g2.effective("field:leads/contact_email")["confidentiality"] == "restricted"
 
 
 # ------------------------------------------------------------------ suggesting types at scale
 def test_type_suggester(model, examples):
-    from gloss.catalogs.file import FileCatalog
-    from gloss.sync import sync
+    from glosslayer.catalogs.file import FileCatalog
+    from glosslayer.sync import sync
 
     g = model
     sync(g, FileCatalog(examples / "catalog.yaml"))
@@ -218,10 +218,10 @@ def test_unknown_check_kinds_are_kept(g):
 
 
 def test_cli_types_and_check_file_db(tmp_path, capsys):
-    from gloss.cli import main
+    from glosslayer.cli import main
 
     db = f"sqlite:///{tmp_path / 'g.db'}"
-    with gloss.open(db) as g:
+    with glosslayer.open(db) as g:
         g.add(Table("crm.leads").add_columns(Column("contact_email", email_type())), actor=ED, accept=True)
     csv = tmp_path / "leads.csv"
     csv.write_text("contact_email\nok@x.io\nbroken\n")

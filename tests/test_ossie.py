@@ -3,14 +3,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-import gloss
-from gloss.ossie import OssieSource, load_document, to_ossie, validate
+import glosslayer
+from glosslayer.ossie import OssieSource, load_document, to_ossie, validate
 
 HERE = Path(__file__).parent
 
 
 def _accept_all(g):
-    g.bulk("accept", gloss.Query(), actor="human:a")
+    g.bulk("accept", glosslayer.Query(), actor="human:a")
 
 
 def _strip_ext(doc):

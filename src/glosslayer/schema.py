@@ -9,12 +9,12 @@ migration already holds, and again whenever it upgrades Gloss:
 
     # an Alembic revision in the host's chain
     def upgrade():
-        gloss.schema.upgrade(op.get_bind())
+        glosslayer.schema.upgrade(op.get_bind())
 
 and keeps Gloss's tables out of its own autogenerate:
 
     context.configure(..., include_object=lambda obj, name, type_, *_:
-                      not (type_ == "table" and gloss.schema.is_gloss_table(name)))
+                      not (type_ == "table" and glosslayer.schema.is_gloss_table(name)))
 
 ``upgrade`` is idempotent: it creates the tables in an empty database and otherwise walks
 the version ladder from wherever the database is to :data:`LATEST`.
@@ -158,5 +158,5 @@ def require(bind: Engine | Connection) -> None:
         state = "has no Gloss tables" if version is None else f"is at schema version {version}"
         raise SchemaNotReady(
             f"The database {state}; this Gloss needs version {LATEST}. "
-            "Run gloss.schema.upgrade(connection) from the host's migrations (or pass create=True)."
+            "Run glosslayer.schema.upgrade(connection) from the host's migrations (or pass create=True)."
         )

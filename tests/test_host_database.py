@@ -3,9 +3,9 @@
 import pytest
 import sqlalchemy as sa
 
-import gloss
-from gloss import ConcurrentWrite, Gloss, SQLStore, Status, schema
-from gloss.model import Event, EventType, apply_event, new_id
+import glosslayer
+from glosslayer import ConcurrentWrite, Gloss, SQLStore, Status, schema
+from glosslayer.model import Event, EventType, apply_event, new_id
 
 F = "field:sales.orders/amount"
 
@@ -71,10 +71,10 @@ def test_a_ledger_without_a_schema_version_is_refused(tmp_path):
 
 def test_owned_database_is_created_and_versioned(tmp_path):
     url = f"sqlite:///{tmp_path / 'g.db'}"
-    with gloss.open(url) as g:
+    with glosslayer.open(url) as g:
         assert schema.current_version(g.store.engine) == schema.LATEST
         assert g.store.fts
-    with gloss.open(url) as g:  # reopening does not recreate anything
+    with glosslayer.open(url) as g:  # reopening does not recreate anything
         assert g.find() == []
 
 
@@ -100,7 +100,7 @@ def test_search_index_commits_with_the_events(g, monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("index unavailable")
 
-    monkeypatch.setattr("gloss.search_index.build_rows", boom)
+    monkeypatch.setattr("glosslayer.search_index.build_rows", boom)
     with pytest.raises(RuntimeError):
         g.accept(a.id, actor="human:a")
     assert g.get(a.id).status is Status.PROPOSED

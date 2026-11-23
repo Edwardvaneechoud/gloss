@@ -1,6 +1,6 @@
 """Precise column types.
 
-    from gloss import Column, Int, Decimal, String, DateTime
+    from glosslayer import Column, Int, Decimal, String, DateTime
 
     Column("return_id", Int(32))
     Column("refund", Decimal(18, 2))

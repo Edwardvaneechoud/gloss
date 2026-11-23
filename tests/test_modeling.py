@@ -3,9 +3,9 @@ from decimal import Decimal
 
 import pytest
 
-import gloss
-from gloss import Column, Metric, PermissionDenied, Relationship, Status, Table
-from gloss.ossie import to_ossie, validate
+import glosslayer
+from glosslayer import Column, Metric, PermissionDenied, Relationship, Status, Table
+from glosslayer.ossie import to_ossie, validate
 
 
 def make_returns() -> Table:
@@ -102,7 +102,7 @@ def test_confidentiality_on_columns(g):
     t = Table("crm.people").add_columns(Column("email", str, confidentiality="restricted", classification=["pii.email"]))
     g.add(t, actor="human:a", accept=True)
     assert g.current("field:crm.people/email")["confidentiality"] == "restricted"
-    from gloss import ai
+    from glosslayer import ai
 
     assert ai.model_context(g)["datasets"][0]["fields"][0]["redacted"] is True
 
@@ -113,4 +113,4 @@ def test_requires_source(g):
 
 
 def test_top_level_exports():
-    assert gloss.Table is Table and gloss.Column is Column
+    assert glosslayer.Table is Table and glosslayer.Column is Column

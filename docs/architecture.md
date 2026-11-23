@@ -110,7 +110,7 @@ stale and goes back to review. Gloss never rewrites meaning on its own.
 
 **AI proposes, people decide.** The default policy forbids AI actors from reviewing or accepting,
 and a person acting through an agent from doing so through it. Every AI-visible view goes through
-`gloss.ai`, which applies the reader's confidentiality limit and reports what it handed out.
+`glosslayer.ai`, which applies the reader's confidentiality limit and reports what it handed out.
 
 **One accepted value, enforced by the database.** A partial unique index on `(subject, attribute)`
 where the status is accepted makes a lost race an error the ledger retries, not two accepted values.
@@ -124,13 +124,13 @@ valid Ossie and round trips keep them.
 Both modes use the same `Gloss` object:
 
 - **Embedded**: `Gloss(SQLStore(host_engine), policy=...)` inside a host process. The host creates and
-  upgrades the tables from its own migrations (`gloss.schema.upgrade(connection)`), binds a view per
-  request with its own actor and context, mounts `gloss.server.create_router` under its API, and
+  upgrades the tables from its own migrations (`glosslayer.schema.upgrade(connection)`), binds a view per
+  request with its own actor and context, mounts `glosslayer.server.create_router` under its API, and
   subscribes to committed events. Gloss sets nothing on the host's engine.
 - **Service**: `gloss serve` exposes the same router; `gloss mcp` exposes AI tools. Here Gloss owns the
-  database (`gloss.open(url)`): it sets SQLite's WAL mode and creates the schema itself.
-- **Both at once**: `gloss.client.Client` reads and proposes against a served ledger, and
-  `gloss.client.Federation` presents a local ledger and a remote one as one view, each owning a path
+  database (`glosslayer.open(url)`): it sets SQLite's WAL mode and creates the schema itself.
+- **Both at once**: `glosslayer.client.Client` reads and proposes against a served ledger, and
+  `glosslayer.client.Federation` presents a local ledger and a remote one as one view, each owning a path
   prefix. Nothing is copied between them.
 
 SQLite suits embedded and single-user use. Postgres suits shared deployments. The test suite runs on both.

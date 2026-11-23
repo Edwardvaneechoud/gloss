@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
-import gloss
-from gloss import ledger as ledger_module
+import glosslayer
+from glosslayer import ledger as ledger_module
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
@@ -41,7 +41,7 @@ def _ledgers_on_the_configured_database(monkeypatch):
         return real_open(scoped.render_as_string(hide_password=False), **kwargs)
 
     monkeypatch.setattr(ledger_module, "open", open_ledger)
-    monkeypatch.setattr(gloss, "open", open_ledger)
+    monkeypatch.setattr(glosslayer, "open", open_ledger)
     yield
     with admin.connect() as conn:
         for name in schemas:
@@ -51,7 +51,7 @@ def _ledgers_on_the_configured_database(monkeypatch):
 
 @pytest.fixture
 def g():
-    with gloss.open("sqlite://") as ledger:
+    with glosslayer.open("sqlite://") as ledger:
         yield ledger
 
 

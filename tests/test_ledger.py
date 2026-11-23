@@ -1,8 +1,8 @@
 import pytest
 
-import gloss
-from gloss import Confidentiality, InvalidTransition, PermissionDenied, Proposal, Status
-from gloss.model import EventType
+import glosslayer
+from glosslayer import Confidentiality, InvalidTransition, PermissionDenied, Proposal, Status
+from glosslayer.model import EventType
 
 F = "field:sales.orders/amount"
 
@@ -118,13 +118,13 @@ def test_progress_and_pending(g):
 def test_bulk_accept(g):
     for i in range(5):
         g.propose(f"field:sales.orders/c{i}", "datatype", "Integer", source="import:x")
-    done, errors = g.bulk("accept", gloss.Query(source_prefix="import:"), actor="human:a")
+    done, errors = g.bulk("accept", glosslayer.Query(source_prefix="import:"), actor="human:a")
     assert len(done) == 5 and not errors
 
 
 def test_role_policy():
-    pol = gloss.RolePolicy(stewards={"finance.": {"human:alice"}}, reviewers={"human:carol"})
-    with gloss.open("sqlite://", policy=pol) as g:
+    pol = glosslayer.RolePolicy(stewards={"finance.": {"human:alice"}}, reviewers={"human:carol"})
+    with glosslayer.open("sqlite://", policy=pol) as g:
         a = g.propose("field:finance.invoices/total", "description", "x", source="ai:claude")
         b = g.propose("field:sales.orders/total", "description", "x", source="ai:claude")
         g.review(a.id, actor="human:carol")
@@ -142,9 +142,9 @@ def test_confidentiality_ordering():
 
 def test_persistence(tmp_path):
     url = f"sqlite:///{tmp_path / 'g.db'}"
-    with gloss.open(url) as g:
+    with glosslayer.open(url) as g:
         a = g.propose(F, "description", "x", source="human:a")
         g.accept(a.id, actor="human:a")
-    with gloss.open(url) as g:
+    with glosslayer.open(url) as g:
         assert g.current(F) == {"description": "x"}
         assert len(g.log()) == 2

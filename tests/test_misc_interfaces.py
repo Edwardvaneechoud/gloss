@@ -2,10 +2,10 @@
 
 import pytest
 
-import gloss
-from gloss import AI, Human, Status, plugins
-from gloss.actors import Actor, IdentityDirectory, Other
-from gloss.cli import main
+import glosslayer
+from glosslayer import AI, Human, Status, plugins
+from glosslayer.actors import Actor, IdentityDirectory, Other
+from glosslayer.cli import main
 
 
 def test_cli_solo_mode_rename_and_restore(tmp_path, capsys):
@@ -80,7 +80,7 @@ def test_a_host_directory_names_actors(g):
         def display_name(self, actor):
             return {"human:7f3a": "Ann"}.get(actor)
 
-    with gloss.open("sqlite://", directory=Names()) as h:
+    with glosslayer.open("sqlite://", directory=Names()) as h:
         a = h.propose("field:t/a", "description", "x", source=Human("7f3a"))
         assert a.created_by == "human:7f3a"  # the log holds the id
         assert h.directory.display_name(a.created_by) == "Ann"
@@ -89,7 +89,7 @@ def test_a_host_directory_names_actors(g):
 
 def test_mcp_tools_act_for_the_bound_person(g):
     pytest.importorskip("mcp")
-    from gloss.mcp_server import build_server
+    from glosslayer.mcp_server import build_server
 
     g.propose("dataset:shop.orders", "description", "Orders", source=Human("a"), accept=True)
     reads = []

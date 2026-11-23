@@ -8,13 +8,13 @@ Gloss is a catalog-agnostic semantic layer built on Apache Ossie. It stores sema
 **assertions** (one fact about one subject), each with its own review status, in an **append-only event
 log**. Valid Ossie documents are generated from accepted facts. Catalogs, importers, exporters and AI
 connect through plugin seams. The primary host is Flowfile; Gloss must stay usable without it, and
-nothing host-specific belongs in `src/gloss`.
+nothing host-specific belongs in `src/glosslayer`.
 
 ## Commands
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]" -e plugins/gloss-flowfile    # library + CLI + extras + the Flowfile plugin
+pip install -e ".[dev]" -e plugins/glosslayer-flowfile    # library + CLI + extras + the Flowfile plugin
 pytest -q                                            # everything, incl. README examples (~5 s)
 GLOSS_TEST_DATABASE_URL=postgresql+psycopg://user:pass@host/db pytest -q     # the same suite on Postgres
 ruff check src plugins tests --select E,F,W,B --ignore E501,B008
@@ -42,7 +42,7 @@ No Postgres at hand: `pip install pgserver` gives a throwaway one (`pgserver.get
 | Ossie import/export, vendored JSON Schema | `ossie/` |
 | AI views, MCP, REST, client + federation, CLI, visualisation | `ai.py`, `mcp_server.py`, `server.py`, `client.py`, `cli.py`, `viz.py` |
 | Plugin protocols, registration and discovery | `seams.py`, `plugins.py` (+ entry points in `pyproject.toml`) |
-| Flowfile plugin (separate package) | `plugins/gloss-flowfile/` |
+| Flowfile plugin (separate package) | `plugins/glosslayer-flowfile/` |
 
 Design rationale: `docs/architecture.md`.
 
@@ -64,7 +64,7 @@ Design rationale: `docs/architecture.md`.
    *structural* facts, and a person's own edits where the mode is `solo`. Never accept on a source's
    behalf anywhere else. Decide on the **actor**, not the source: callers choose `source` freely.
 5. **AI never reviews or accepts** (`DefaultPolicy`), including a person acting `via` an agent.
-   Everything AI-facing goes through `gloss.ai` or a view from `Gloss.as_actor`. Never hand an unbound
+   Everything AI-facing goes through `glosslayer.ai` or a view from `Gloss.as_actor`. Never hand an unbound
    ledger's raw snapshots or assertions to an AI tool.
 6. **Reads are made as someone.** A `Gloss` from `as_actor` filters every read by `Policy.scope` (paths
    pushed into SQL, details above the reader's level redacted). A new reader must take its rows through
@@ -73,7 +73,7 @@ Design rationale: `docs/architecture.md`.
 7. **Gloss never touches a host's database uninvited.** No connection listeners, pragmas or DDL on an
    engine it was given; DDL only in `schema.upgrade`, only on `gloss_` tables. A schema change after a
    release is a new step in `schema._STEPS` plus a bumped `LATEST`.
-8. **The core imports no catalog or tool.** Nothing in `src/gloss` may import Flowfile or any other host.
+8. **The core imports no catalog or tool.** Nothing in `src/glosslayer` may import Flowfile or any other host.
    Plugins depend on the core, never the reverse. Optional dependencies (polars, fastapi, mcp,
    jsonschema) are imported lazily inside functions.
 9. **Exports must validate** against `ossie/ossie-schema.json`. Gloss-only data goes in
@@ -125,7 +125,7 @@ Design rationale: `docs/architecture.md`.
   part after the colon is an id, not a display name (`ActorDirectory` resolves names). A string without a
   `kind:` prefix is invalid everywhere.
 - Timestamps are UTC (`model.utcnow`). SQLite drops tzinfo, and `store/sql._aware` restores it.
-- Tests use the in-memory `g` fixture (`tests/conftest.py`) and the `examples/` data. `gloss.open("sqlite://")`
+- Tests use the in-memory `g` fixture (`tests/conftest.py`) and the `examples/` data. `glosslayer.open("sqlite://")`
   in a test is redirected to a fresh Postgres schema when `GLOSS_TEST_DATABASE_URL` is set, so write tests
   that hold on both. The search tests run on the database's full-text search and the plain fallback.
 - **The README's Python examples are executed by `tests/test_readme.py`.** If you change behaviour or
@@ -149,7 +149,7 @@ Design rationale: `docs/architecture.md`.
 - `mcp_server.py` supports MCP SDK 2.x (`MCPServer`) and 1.x (`FastMCP`).
 - SQL regex functions differ per dialect (DuckDB `regexp_matches`, Postgres `~`, Snowflake `REGEXP_LIKE`,
   BigQuery `REGEXP_CONTAINS`). Only DuckDB is verified in tests.
-- `gloss-flowfile` is tested against a fake `CatalogService` shaped like Flowfile's `CatalogTableOut`,
+- `glosslayer-flowfile` is tested against a fake `CatalogService` shaped like Flowfile's `CatalogTableOut`,
   not a running Flowfile. Flowfile has no event for table changes: its update and delete paths must call
   `Embedded.table_renamed` / `table_deleted`.
 - Search index contents are versioned (`search_index.INDEX_VERSION`). Bump it whenever what goes into index

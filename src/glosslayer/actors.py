@@ -1,6 +1,6 @@
 """Typed actors: who stated or did something.
 
-    from gloss import Human, AI
+    from glosslayer import Human, AI
 
     g.add(table, source=Human("edward"))
     g.accept(assertion_id, actor=Human("alice"))

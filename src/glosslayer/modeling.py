@@ -1,9 +1,9 @@
 """Object-style modelling API.
 
-    import gloss
-    from gloss import Table, Column, Relationship, Metric, Human
+    import glosslayer
+    from glosslayer import Table, Column, Relationship, Metric, Human
 
-    g = gloss.open("sqlite:///gloss.db")
+    g = glosslayer.open("sqlite:///gloss.db")
 
     orders = Table("shop.orders", primary_key=[Column("order_id", "Integer")])
 

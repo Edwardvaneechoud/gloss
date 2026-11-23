@@ -24,13 +24,13 @@ from pathlib import Path
 import polars as pl
 import yaml
 
-import gloss
-from gloss import Column, Human, Metric, Relationship, SemanticType, Status, String, Table, checks
-from gloss.catalogs.file import FileCatalog
-from gloss.mcp_server import build_server
-from gloss.ossie import validate
-from gloss.sync import sync
-from gloss.viz import html_report, progress_table
+import glosslayer
+from glosslayer import Column, Human, Metric, Relationship, SemanticType, Status, String, Table, checks
+from glosslayer.catalogs.file import FileCatalog
+from glosslayer.mcp_server import build_server
+from glosslayer.ossie import validate
+from glosslayer.sync import sync
+from glosslayer.viz import html_report, progress_table
 
 EDWARD, ALICE = Human("edward"), Human("alice")
 
@@ -78,7 +78,7 @@ def write_catalog(path: Path, *, week: int) -> FileCatalog:
 class Agent:
     """Calls Gloss's MCP tools in-process, exactly as an MCP client such as Claude would."""
 
-    def __init__(self, g: gloss.Gloss, name: str):
+    def __init__(self, g: glosslayer.Gloss, name: str):
         self.server = build_server(g, agent=name)
 
     def __call__(self, tool: str, **args):
@@ -96,7 +96,7 @@ class Agent:
 
 def main(workdir: Path) -> None:
     workdir.mkdir(parents=True, exist_ok=True)
-    g = gloss.open(f"sqlite:///{workdir / 'gloss.db'}")
+    g = glosslayer.open(f"sqlite:///{workdir / 'gloss.db'}")
     catalog_file = workdir / "catalog.yaml"
 
     # ------------------------------------------------------------------ week 1
@@ -141,7 +141,7 @@ def main(workdir: Path) -> None:
     for a in g.pending(source_prefix="human:edward")[:4]:
         print(f"  {a!r}")
     print(f"  … {len(g.pending(source_prefix='human:edward'))} in total")
-    done, _ = g.bulk("accept", gloss.Query(source_prefix="human:edward"), actor=ALICE,
+    done, _ = g.bulk("accept", glosslayer.Query(source_prefix="human:edward"), actor=ALICE,
                      comment="reviewed in the modelling session")
     print(f"  Alice accepted {len(done)} facts")
     email = g.effective("field:shop.customers/email")
@@ -149,10 +149,10 @@ def main(workdir: Path) -> None:
           f"classification={email['classification']}, {len(email['checks'])} check")
 
     step(4, "Gloss suggests the types for columns nobody has described yet")
-    suggester = gloss.TypeSuggester()
+    suggester = glosslayer.TypeSuggester()
     for r in g.propose_many(suggester.proposals(g), source=suggester.source_id):
         print(f"  suggested: {r.assertion.subject} is a {r.assertion.value} (confidence {r.assertion.confidence})")
-    done, _ = g.bulk("accept", gloss.Query(source_prefix=suggester.source_id), actor=ALICE)
+    done, _ = g.bulk("accept", glosslayer.Query(source_prefix=suggester.source_id), actor=ALICE)
     print(f"  Alice accepted {len(done)} suggestions; mkt.newsletter/subscriber_email is now "
           f"{g.effective('field:mkt.newsletter/subscriber_email')['confidentiality']}")
 
@@ -218,7 +218,7 @@ def main(workdir: Path) -> None:
         print(f"  {a!r}")
 
     step(10, "Alice resolves the stale facts")
-    done, _ = g.bulk("retract", gloss.Query(subject="field:shop.orders/status", statuses=[Status.STALE]),
+    done, _ = g.bulk("retract", glosslayer.Query(subject="field:shop.orders/status", statuses=[Status.STALE]),
                      actor=ALICE, comment="column was dropped")
     print(f"  retracted {len(done)} facts about the dropped status column")
     st = g.find(subject="field:mkt.newsletter/country", attribute="semantic_type", statuses=[Status.STALE])[0]

@@ -1,6 +1,6 @@
 """Data quality checks attached to semantic types and fields.
 
-    from gloss import checks
+    from glosslayer import checks
 
     checks.not_null()
     checks.unique()

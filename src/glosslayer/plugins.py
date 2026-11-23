@@ -3,10 +3,10 @@
 A package registers plugins in its ``pyproject.toml``:
 
     [project.entry-points."gloss.catalogs"]
-    flowfile = "gloss_flowfile:FlowfileCatalog"
+    flowfile = "glosslayer_flowfile:FlowfileCatalog"
 
     [project.entry-points."gloss.sources"]
-    flowfile-lineage = "gloss_flowfile:LineageSource"
+    flowfile-lineage = "glosslayer_flowfile:LineageSource"
 
 Each entry point is a class (or factory). From the CLI a plugin is addressed
 as ``name`` or ``name:argument``; the argument is passed to ``from_spec`` if
@@ -15,7 +15,7 @@ the class defines it, otherwise to the constructor.
 A host that embeds Gloss can skip entry points altogether and register in code,
 which also works where distribution metadata is missing (a frozen application):
 
-    gloss.plugins.register("catalog", "flowfile", FlowfileCatalog)
+    glosslayer.plugins.register("catalog", "flowfile", FlowfileCatalog)
 """
 
 from __future__ import annotations
@@ -32,12 +32,12 @@ GROUPS = {
 # Built-ins are also declared as entry points in pyproject.toml; this fallback
 # keeps them available when running from a source checkout that is not installed.
 _BUILTINS = {
-    "gloss.catalogs": {"file": "gloss.catalogs.file:FileCatalog"},
+    "gloss.catalogs": {"file": "glosslayer.catalogs.file:FileCatalog"},
     "gloss.sources": {
-        "ossie": "gloss.ossie.importer:OssieSource",
-        "semantic-types": "gloss.semantic:TypeSuggester",
+        "ossie": "glosslayer.ossie.importer:OssieSource",
+        "semantic-types": "glosslayer.semantic:TypeSuggester",
     },
-    "gloss.sinks": {"ossie": "gloss.ossie.exporter:OssieSink", "git": "gloss.sinks:GitSink"},
+    "gloss.sinks": {"ossie": "glosslayer.ossie.exporter:OssieSink", "git": "glosslayer.sinks:GitSink"},
 }
 
 

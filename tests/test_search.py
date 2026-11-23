@@ -2,20 +2,20 @@
 
 import pytest
 
-import gloss
-from gloss import Column, Human, SemanticType, String, Table
-from gloss.ossie import OssieSource
+import glosslayer
+from glosslayer import Column, Human, SemanticType, String, Table
+from glosslayer.ossie import OssieSource
 
 ED = Human("edward")
 
 
 @pytest.fixture(params=["fts", "like"])
 def shop(request, examples):
-    with gloss.open("sqlite://") as g:
+    with glosslayer.open("sqlite://") as g:
         if request.param == "like":
             g.store.fts = False  # exercise the portable fallback used on Postgres & co
         g.propose_many(OssieSource(examples / "semantic_model.yaml").proposals(), source="import:ossie")
-        g.bulk("accept", gloss.Query(), actor=ED)
+        g.bulk("accept", glosslayer.Query(), actor=ED)
         yield g
 
 
@@ -52,7 +52,7 @@ def test_spelling_is_corrected_from_the_index(shop):
 
 
 def test_type_definitions_stay_visible_to_ai(g):
-    from gloss import Column, SemanticType, String, Table
+    from glosslayer import Column, SemanticType, String, Table
 
     Email = SemanticType("email_address", dtype=String(320), description="An e-mail address",
                          confidentiality="restricted")
@@ -120,16 +120,16 @@ def test_rebuild_matches_incremental(shop):
 
 def test_old_database_gets_indexed_on_first_search(tmp_path, examples):
     url = f"sqlite:///{tmp_path / 'g.db'}"
-    with gloss.open(url) as g:
+    with glosslayer.open(url) as g:
         g.propose_many(OssieSource(examples / "semantic_model.yaml").proposals(), source="import:ossie")
-        g.bulk("accept", gloss.Query(), actor=ED)
+        g.bulk("accept", glosslayer.Query(), actor=ED)
         g.store.clear_search()  # simulate a ledger written before the index existed
-    with gloss.open(url) as g:
+    with glosslayer.open(url) as g:
         assert "field:orders/amount" in subjects(g.search("amount"))
 
 
 def test_cli_search(tmp_path, examples, capsys):
-    from gloss.cli import main
+    from glosslayer.cli import main
 
     db = ["--db", f"sqlite:///{tmp_path / 'g.db'}", "--actor", "human:t"]
     main(db + ["import", "ossie", str(examples / "semantic_model.yaml"), "--accept"])
@@ -143,7 +143,7 @@ def test_cli_search(tmp_path, examples, capsys):
 
 
 def test_mail_finds_email_columns_through_the_type(g):
-    from gloss import Column, SemanticType, String, Table
+    from glosslayer import Column, SemanticType, String, Table
 
     Email = SemanticType("email_address", dtype=String(320), confidentiality="restricted", synonyms=["e-mail"])
     g.add(Table("crm.leads").add_columns(Column("email", Email), Column("useremail", String(320))),
@@ -161,14 +161,14 @@ def test_plurals_are_stemmed(shop):
 
 
 def test_words_inside_names(g):
-    from gloss import Column, String, Table
+    from glosslayer import Column, String, Table
 
     g.add(Table("crm.users").add_columns(Column("useremail", String(320))), actor=ED, accept=True)
     assert subjects(g.search("mail")) == ["field:crm.users/useremail"]
 
 
 def test_ai_spelling_suggestions_never_reveal_restricted_words(g):
-    from gloss import Column, String, Table
+    from glosslayer import Column, String, Table
 
     g.add(Table("hr.staff").add_columns(
         Column("note", String(100), description="Pending dismissal of Hendrickson", confidentiality="restricted")),
@@ -182,7 +182,7 @@ def test_ai_spelling_suggestions_never_reveal_restricted_words(g):
 
 @pytest.mark.parametrize("typo,word", [("fmail", "mail"), ("emial", "email"), ("cusotmer", "customer"), ("ordr", "order")])
 def test_common_typos(g, typo, word):
-    from gloss import Column, SemanticType, String, Table
+    from glosslayer import Column, SemanticType, String, Table
 
     if not g.store.fts:
         pytest.skip("spelling suggestions need SQLite FTS5")

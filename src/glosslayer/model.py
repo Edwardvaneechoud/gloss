@@ -124,7 +124,7 @@ def register_attribute(
 ) -> AttributeSpec:
     """Make an attribute known, so hosts can extend the vocabulary without changing Gloss.
 
-        gloss.register_attribute("time_column", ["metric"], validate=str)
+        glosslayer.register_attribute("time_column", ["metric"], validate=str)
 
     Registering a name again replaces its definition. Facts stating an attribute this process
     does not know stay readable; they just cannot be proposed until it is registered.
@@ -459,7 +459,7 @@ class Assertion:
 
     @property
     def subject_id(self) -> SubjectId:
-        """The subject parsed into a :class:`~gloss.ids.SubjectId`."""
+        """The subject parsed into a :class:`~glosslayer.ids.SubjectId`."""
         return SubjectId.parse(self.subject)
 
     @property
@@ -481,7 +481,7 @@ class Assertion:
 
     @property
     def source_actor(self) -> Actor:
-        """The source as an :class:`~gloss.actors.Actor`, parsed from its ``kind:id`` string."""
+        """The source as an :class:`~glosslayer.actors.Actor`, parsed from its ``kind:id`` string."""
         from .actors import Actor
 
         return Actor.parse(self.source)
