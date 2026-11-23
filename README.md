@@ -11,6 +11,9 @@ Gloss is a Python library you embed in your own app (it's built to live inside [
 or a small service you run next to any catalog. Catalogs, importers, exporters and AI agents connect
 through plugins.
 
+The project is called Gloss; the package on PyPI, and the name you import, is `glosslayer`
+(`pip install glosslayer`). The command it installs is `gloss`.
+
 ```python
 import glosslayer
 from glosslayer import Table, Column, SemanticType, Human, Int, String, checks
@@ -136,9 +139,17 @@ rejected as a unit, because half a join is not a join.
 ## Install
 
 ```bash
-git clone <this repo> gloss && cd gloss
-pip install -e ".[dev]"           # library, CLI, REST, MCP, validation, Polars checks, tests
-# or pick extras: pip install -e ".[server,mcp,validate,checks,postgres]"
+pip install glosslayer                     # the core: library and the `gloss` command
+pip install "glosslayer[all]"              # plus REST, MCP, validation, Polars checks and Postgres
+# or pick extras: pip install "glosslayer[server,mcp,validate,checks,postgres]"
+pip install glosslayer-flowfile            # the Flowfile plugin
+```
+
+To work on Gloss itself, install from a clone:
+
+```bash
+git clone https://github.com/Edwardvaneechoud/glosslayer.git && cd glosslayer
+pip install -e ".[dev]" -e plugins/glosslayer-flowfile    # library, CLI, all extras, tests, the plugin
 ```
 
 Python 3.10+. The core needs only SQLAlchemy and PyYAML. The ledger is a SQLAlchemy URL:
@@ -695,7 +706,7 @@ glosslayer.register_attribute("trusted", ["dataset", "metric"], validate=bool)  
 ```
 
 The only data file is `glosslayer/ossie/ossie-schema.json`, needed for `validate()`; include it as package data
-when freezing (PyInstaller: `collect_data_files("gloss")`).
+when freezing (PyInstaller: `collect_data_files("glosslayer")`).
 
 ### Two ledgers as one
 

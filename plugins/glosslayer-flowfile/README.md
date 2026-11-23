@@ -11,6 +11,12 @@ Gloss plugin for [Flowfile](https://github.com/Edwardvaneechoud/Flowfile)'s cata
 Nothing in this package imports Flowfile: it is handed Flowfile's objects and plain values. It is tested
 against a fake `CatalogService` with the shape of Flowfile's `CatalogTableOut`, not a running Flowfile.
 
+## Install
+
+```bash
+pip install glosslayer-flowfile          # pulls in the matching glosslayer core
+```
+
 ## Embedded in Flowfile's backend
 
 ```python
@@ -73,7 +79,7 @@ What the pieces take care of:
 
 - Register plugins in code so nothing depends on distribution metadata:
   `glosslayer.plugins.register("catalog", "flowfile", FlowfileCatalog)`.
-- Add `collect_data_files("gloss")` for `gloss/ossie/ossie-schema.json` (only needed for `validate()`).
+- Add `collect_data_files("glosslayer")` for `glosslayer/ossie/ossie-schema.json` (only needed for `validate()`).
 - Gloss's core needs SQLAlchemy and PyYAML, both already Flowfile dependencies.
 
 ## Standalone
