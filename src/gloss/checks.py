@@ -54,14 +54,18 @@ def register(cls: type[Check]) -> type[Check]:
 
 @dataclass(frozen=True)
 class Check:
+    """Base of the check declarations: a frozen dataclass whose fields are its parameters."""
+
     kind: ClassVar[str] = ""
     row_level: ClassVar[bool] = True  # False: evaluated over the whole column (e.g. unique)
 
     def to_dict(self) -> dict[str, Any]:
+        """The stored form: ``{"check": kind, **parameters}``, leaving out parameters that are None."""
         return {"check": self.kind, **{k: v for k, v in asdict(self).items() if v is not None}}
 
     @staticmethod
     def from_dict(d: dict[str, Any]) -> Check:
+        """Rebuild a check from its stored form; an unregistered kind becomes :class:`Unknown`."""
         d = dict(d)
         kind = d.pop("check")
         cls = _REGISTRY.get(kind)
@@ -70,14 +74,23 @@ class Check:
         return cls(**d)
 
     def describe(self) -> str:
+        """A short readable form, e.g. ``between(min=0, max=10)``."""
         args = ", ".join(f"{f.name}={getattr(self, f.name)!r}" for f in fields(self) if getattr(self, f.name) is not None)
         return f"{self.kind}({args})"
 
     # Implement one or both. Each returns a *pass* condition.
     def polars(self, col: str) -> Any:  # -> pl.Expr (True = row passes)
+        """A Polars expression that is true for rows of ``col`` that pass.
+
+        A null result counts as a failure, so a check that lets nulls pass must say so explicitly.
+        """
         raise NotImplementedError(f"check {self.kind} has no Polars implementation")
 
     def sql(self, col: str, dialect: str = "ansi") -> str:  # boolean SQL, TRUE = row passes
+        """A boolean SQL condition over ``col``, TRUE for rows that pass; a NULL result counts as a failure.
+
+        Only row-level checks need one: ``to_sql`` writes its own query for checks with ``row_level`` False.
+        """
         raise NotImplementedError(f"check {self.kind} has no SQL implementation")
 
 
@@ -96,6 +109,8 @@ def _lit(v: Any) -> str:
 @register
 @dataclass(frozen=True)
 class NotNull(Check):
+    """Passes when the value is not null."""
+
     kind: ClassVar[str] = "not_null"
 
     def polars(self, col: str) -> Any:
@@ -110,6 +125,12 @@ class NotNull(Check):
 @register
 @dataclass(frozen=True)
 class Unique(Check):
+    """Passes when no other row has the same value; nulls pass.
+
+    Polars fails every copy of a duplicated value, while the SQL query from ``to_sql`` counts only
+    the extra copies, so the two report different ``failed_rows`` for the same data.
+    """
+
     kind: ClassVar[str] = "unique"
     row_level: ClassVar[bool] = False
 
@@ -122,6 +143,12 @@ class Unique(Check):
 @register
 @dataclass(frozen=True)
 class Matches(Check):
+    """Passes when the value, as text, contains a match for the regular expression ``pattern``; nulls pass.
+
+    The pattern is not anchored (add ``^``/``$``), except where the SQL dialect anchors it: Snowflake's
+    ``REGEXP_LIKE`` and the ANSI fallback ``SIMILAR TO`` (which has its own syntax) match the whole value.
+    """
+
     pattern: str = ""
     kind: ClassVar[str] = "matches"
 
@@ -151,6 +178,8 @@ class Matches(Check):
 @register
 @dataclass(frozen=True)
 class OneOf(Check):
+    """Passes when the value is one of ``values``; nulls pass."""
+
     values: tuple[Any, ...] = ()
     kind: ClassVar[str] = "one_of"
 
@@ -172,6 +201,8 @@ class OneOf(Check):
 @register
 @dataclass(frozen=True)
 class Between(Check):
+    """Passes when ``min <= value <= max`` (either bound may be None); nulls pass."""
+
     min: Any = None
     max: Any = None
     kind: ClassVar[str] = "between"
@@ -196,6 +227,8 @@ class Between(Check):
 @register
 @dataclass(frozen=True)
 class Length(Check):
+    """Passes when the value's length in characters is within ``min`` and ``max`` (inclusive); nulls pass."""
+
     min: int | None = None
     max: int | None = None
     kind: ClassVar[str] = "length"
@@ -254,30 +287,37 @@ class Unknown(Check):
 
 # Friendly constructors
 def not_null() -> Check:
+    """A :class:`NotNull` check."""
     return NotNull()
 
 
 def unique() -> Check:
+    """A :class:`Unique` check."""
     return Unique()
 
 
 def matches(pattern: str) -> Check:
+    """A :class:`Matches` check; the pattern is compiled now, so a bad one fails here."""
     return Matches(pattern)
 
 
 def one_of(values: Sequence[Any]) -> Check:
+    """A :class:`OneOf` check."""
     return OneOf(tuple(values))
 
 
 def between(min: Any = None, max: Any = None) -> Check:  # noqa: A002
+    """A :class:`Between` check."""
     return Between(min, max)
 
 
 def length(min: int | None = None, max: int | None = None) -> Check:  # noqa: A002
+    """A :class:`Length` check."""
     return Length(min, max)
 
 
 def sql(expression: str) -> Check:
+    """A :class:`Sql` check: any boolean SQL, with ``{column}`` for the column; a NULL result fails."""
     return Sql(expression)
 
 
@@ -295,6 +335,8 @@ def normalise(items: Sequence[Check | dict[str, Any]]) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------- running
 @dataclass
 class CheckResult:
+    """The outcome of one check on one field; ``error`` is set when it could not be evaluated."""
+
     subject: str  # field subject, e.g. field:shop.customers/email
     check: dict[str, Any]
     passed: bool
@@ -324,6 +366,7 @@ class CheckResult:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> CheckResult:
+        """Rebuild a result from :meth:`to_dict`; without a timestamp it is stamped now."""
         ts = d.get("ts")
         return cls(
             d["subject"], d["check"], bool(d["passed"]), int(d["failed_rows"]), int(d["total_rows"]),

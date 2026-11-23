@@ -77,6 +77,7 @@ def _query_from(args: argparse.Namespace, statuses: list[Status] | None) -> Quer
 
 # ---------------------------------------------------------------------------- commands
 def cmd_init(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss init``: report the schema version; opening the ledger in ``main`` has created it."""
     from . import schema
 
     print(f"Gloss ledger ready at {args.db} (schema version {schema.current_version(g.store.engine)})")
@@ -84,6 +85,7 @@ def cmd_init(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_import(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss import``: propose every fact from a source plugin; ``--accept`` accepts them as ``--actor``."""
     kwargs = {"key_by": args.key_by, "namespace": args.namespace} if args.plugin == "ossie" else {}
     src = plugins.instantiate("source", f"{args.plugin}:{args.target}" if args.target else args.plugin, **kwargs)
     results = g.propose_many(
@@ -100,6 +102,7 @@ def cmd_import(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_sync(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss sync``: sync with a catalog plugin and print what was new, changed, moved or gone."""
     from .sync import sync
 
     catalog = plugins.instantiate("catalog", args.catalog)
@@ -115,6 +118,7 @@ def cmd_sync(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_propose(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss propose``: propose one fact; the value is read as JSON when it parses, else as text."""
     try:
         value = json.loads(args.value)
     except json.JSONDecodeError:
@@ -133,6 +137,7 @@ def cmd_propose(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_list(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss list`` and ``gloss pending``: print facts matching the filters (pending: open ones)."""
     statuses = [Status(s) for s in args.status] if args.status else None
     if args.command == "pending" and statuses is None:
         statuses = list(OPEN_STATUSES)
@@ -141,6 +146,7 @@ def cmd_list(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_action(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss accept`` and the other review actions: on the given ids, or with ``--all`` on every match."""
     action = args.command
     if args.all:
         statuses = [Status(s) for s in args.status] if args.status else list(OPEN_STATUSES)
@@ -175,6 +181,7 @@ def cmd_action(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_rename(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss rename``: re-key a subject, or a whole path with ``--namespace``, so its facts follow."""
     fn = g.rekey_namespace if args.namespace else g.rekey
     res = fn(args.old, args.new, actor=args.actor, comment=args.comment)
     print(
@@ -185,6 +192,7 @@ def cmd_rename(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_show(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss show``: a subject's accepted values, then its facts that are not accepted."""
     current = g.current(args.subject)
     rows = g.find(subject=str(args.subject))
     if args.json:
@@ -202,6 +210,7 @@ def cmd_show(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_history(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss history``: the events of one subject, or the whole log after ``--after``."""
     events = g.history(args.subject) if args.subject else g.log(after_seq=args.after, limit=args.limit)
     if args.json:
         print(json.dumps([e.to_dict() for e in events], indent=2, default=str))
@@ -225,6 +234,7 @@ def cmd_history(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_progress(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss progress``: review progress per dataset, as a table or JSON."""
     from .viz import progress_table
 
     if args.json:
@@ -235,6 +245,7 @@ def cmd_progress(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_export(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss export``: write the model as Ossie YAML or publish it through a sink plugin."""
     opts: dict[str, Any] = {"include_pending": args.include_pending, "annotate": not args.no_annotate}
     if args.name:
         opts["name"] = args.name
@@ -269,6 +280,7 @@ def cmd_export(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_viz(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss viz``: print a Mermaid ER diagram, or write an HTML report with ``--html``."""
     from .viz import html_report, mermaid_er
 
     if args.html:
@@ -281,6 +293,7 @@ def cmd_viz(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_types(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss types``: accepted semantic types and the fields that use them."""
     from .checks import Check
 
     state = g.snapshot([Status.ACCEPTED])
@@ -309,6 +322,7 @@ def cmd_types(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_check(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss check``: run a dataset's checks on a Parquet or CSV file (exit 1 if any fail), or print SQL."""
     from . import checks
 
     if args.sql:
@@ -333,6 +347,7 @@ def cmd_check(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_search(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss search``: search accepted knowledge; ``--as-ai`` applies the AI visibility limit."""
     hits = g.search(" ".join(args.text), kinds=args.kind, dataset_prefix=args.dataset, limit=args.limit,
                     for_ai=bool(args.as_ai))
     if args.json:
@@ -348,17 +363,20 @@ def cmd_search(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_reindex(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss reindex``: rebuild the search index."""
     print(f"indexed {g.rebuild_search_index()} subjects")
     return 0
 
 
 def cmd_rebuild(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss rebuild``: recompute every assertion's state from the event log."""
     n = g.rebuild_projection()
     print(f"rebuilt {n} assertions from the event log")
     return 0
 
 
 def cmd_plugins(g: Gloss | None, args: argparse.Namespace) -> int:
+    """``gloss plugins``: list the installed plugins by kind (needs no ledger)."""
     for kind in plugins.GROUPS:
         for name, target in sorted(plugins.available(kind).items()):
             print(f"{kind:<8} {name:<20} {target}")
@@ -366,6 +384,7 @@ def cmd_plugins(g: Gloss | None, args: argparse.Namespace) -> int:
 
 
 def cmd_serve(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss serve``: run the REST API with uvicorn; the actor comes from the ``X-Gloss-Actor`` header."""
     import uvicorn
 
     from .server import create_app
@@ -375,6 +394,7 @@ def cmd_serve(g: Gloss, args: argparse.Namespace) -> int:
 
 
 def cmd_mcp(g: Gloss, args: argparse.Namespace) -> int:
+    """``gloss mcp``: run the MCP server, proposing as ``ai:<agent>``."""
     from .mcp_server import run
 
     run(g, agent=args.agent, transport=args.transport)
@@ -383,6 +403,7 @@ def cmd_mcp(g: Gloss, args: argparse.Namespace) -> int:
 
 # ---------------------------------------------------------------------------- parser
 def build_parser() -> argparse.ArgumentParser:
+    """The ``gloss`` argument parser; each subcommand sets ``fn`` to its ``cmd_*`` function."""
     p = argparse.ArgumentParser(prog="gloss", description="Track, review and serve semantic metadata.")
     p.add_argument("--db", default=os.environ.get("GLOSS_DB", DEFAULT_DB), help="SQLAlchemy URL (env GLOSS_DB)")
     p.add_argument("--actor", default=_default_actor(), help="who is acting, e.g. human:alice (env GLOSS_ACTOR)")
@@ -517,6 +538,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run ``gloss`` with ``argv`` and return the exit code (2, with a one-line message, on a known error)."""
     from .model import InvalidTransition
     from .policy import PermissionDenied
 

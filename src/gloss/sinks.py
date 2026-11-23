@@ -29,6 +29,7 @@ class GitSink:
 
     @classmethod
     def from_spec(cls, arg: str, **kwargs: Any) -> GitSink:
+        """``repo`` or ``repo#path/in/repo.yaml``; the path defaults to ``semantic_model.yaml``."""
         repo, _, path = arg.partition("#")
         return cls(repo, path or "semantic_model.yaml", **kwargs)
 
@@ -38,6 +39,7 @@ class GitSink:
         ).stdout
 
     def publish(self, gloss: Gloss, *, message: str | None = None, **options: Any) -> ExportResult:
+        """Export, write the file and commit it; no commit when the exported text is unchanged."""
         result = to_ossie(gloss, **options)
         target = self.repo / self.path
         target.parent.mkdir(parents=True, exist_ok=True)

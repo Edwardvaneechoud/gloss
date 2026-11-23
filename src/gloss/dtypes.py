@@ -26,6 +26,8 @@ from .types import to_ossie_datatype
 
 @dataclass(frozen=True)
 class DType:
+    """Base of the precise column types: ``ossie`` is the Ossie datatype, ``physical`` the precise one."""
+
     ossie_name: ClassVar[str] = "Opaque"
 
     @property
@@ -44,6 +46,8 @@ class DType:
 
 @dataclass(frozen=True)
 class Int(DType):
+    """An integer, signed unless ``unsigned``; ``bits`` is 8, 16, 32, 64 or 128, or None for any width."""
+
     bits: int | None = None
     unsigned: bool = False
     ossie_name: ClassVar[str] = "Integer"
@@ -65,11 +69,15 @@ class Int(DType):
 
 @dataclass(frozen=True, repr=False)
 class UInt(Int):
+    """An unsigned integer; ``UInt()`` without a width still records that it is unsigned."""
+
     unsigned: bool = True
 
 
 @dataclass(frozen=True)
 class Float(DType):
+    """A floating-point number of 16, 32 or 64 ``bits``, or None for any width."""
+
     bits: int | None = None
     ossie_name: ClassVar[str] = "Float"
 
@@ -87,6 +95,8 @@ class Float(DType):
 
 @dataclass(frozen=True)
 class Decimal(DType):
+    """A fixed-point number: ``precision`` of 1 to 76 digits, and a ``scale`` that needs a precision."""
+
     precision: int | None = None
     scale: int | None = None
     ossie_name: ClassVar[str] = "Decimal"
@@ -112,6 +122,8 @@ class Decimal(DType):
 
 @dataclass(frozen=True)
 class String(DType):
+    """Text, with an optional maximum ``length``."""
+
     length: int | None = None
     ossie_name: ClassVar[str] = "String"
 
@@ -129,16 +141,22 @@ class String(DType):
 
 @dataclass(frozen=True)
 class Boolean(DType):
+    """A true/false value."""
+
     ossie_name: ClassVar[str] = "Boolean"
 
 
 @dataclass(frozen=True)
 class Date(DType):
+    """A calendar date without a time."""
+
     ossie_name: ClassVar[str] = "Date"
 
 
 @dataclass(frozen=True)
 class Time(DType):
+    """A time of day without a date."""
+
     ossie_name: ClassVar[str] = "Time"
 
 

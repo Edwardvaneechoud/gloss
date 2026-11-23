@@ -67,6 +67,7 @@ class FlowfilePolicy(DefaultPolicy):
         return any(path_covers(p, path) for p in attrs.get("manage") or ())
 
     def may_decide(self, actor: str, assertion: Assertion | None, context: Context | None) -> bool:
+        """Admins and solo mode decide all; others must manage the fact's path (and a re-key's target)."""
         if assertion is None:
             return bool(self._attrs(context).get("admin")) or self.mode == SOLO
         if not self._manages(context, assertion.scope_path):
@@ -79,6 +80,7 @@ class FlowfilePolicy(DefaultPolicy):
         return True
 
     def readable_prefixes(self, actor: str, context: Context | None) -> tuple[str, ...] | None:
+        """A person's ``read`` plus ``manage`` paths; all for admins, non-humans or an unset ``read``."""
         attrs = self._attrs(context)
         if actor_kind(actor) != "human" or attrs.get("admin") or attrs.get("read") is None:
             return None
@@ -97,6 +99,7 @@ class Directory:
         self._lookup = lookup
 
     def display_name(self, actor: str) -> str | None:
+        """A person's name from the host's lookup; other actors show their id."""
         kind, ident = split_actor(actor)
         return self._lookup(ident) if kind == "human" else ident
 
@@ -111,22 +114,31 @@ class Embedded:
         self._stop = write_back(gloss, catalog) if own_descriptions else None
 
     def close(self) -> None:
+        """Stop writing accepted descriptions back to the catalog; safe to call twice."""
         if self._stop is not None:
             self._stop()
             self._stop = None
 
     # -- catalog events: run as the catalog's own principal, over everything ---------
     def sync(self) -> SyncReport:
+        """Pull sync of the whole catalog: at startup, and whenever events may have been missed."""
         return sync(self.gloss, self.catalog)
 
     def table_written(self, key: str) -> SyncReport:
+        """Call after Flowfile creates or overwrites a table."""
         return sync_asset(self.gloss, self.catalog, key)
 
     def table_renamed(self, old_key: str, new_key: str) -> SyncReport:
+        """Call from Flowfile's table update path on a rename or move, so the table's facts follow it.
+
+        Flowfile emits no table-change event, so a rename the host does not report looks like
+        drop + add to a pull sync.
+        """
         self.catalog.tables(refresh=True)
         return asset_moved(self.gloss, self.catalog, old_key, new_key)
 
     def table_deleted(self, key: str) -> SyncReport:
+        """Call from Flowfile's table delete path: the table's facts are marked stale."""
         return asset_removed(self.gloss, self.catalog, key)
 
     # -- per request -----------------------------------------------------------------

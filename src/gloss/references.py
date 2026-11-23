@@ -12,6 +12,7 @@ from typing import Any
 
 
 def expression_texts(expr: Any) -> list[str]:
+    """The SQL texts of an expression: its ``sql`` and every dialect's, or the value as a string."""
     if isinstance(expr, dict):
         out = [expr.get("sql") or ""]
         out += [d.get("expression", "") for d in expr.get("dialects", [])]
@@ -24,6 +25,7 @@ def _word(name: str) -> re.Pattern[str]:
 
 
 def short_name(key: str) -> str:
+    """The last dotted segment of a dataset key (``shop.orders`` → ``orders``), as SQL tends to name it."""
     return key.rsplit(".", 1)[-1]
 
 
@@ -46,4 +48,5 @@ _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def quote_ident(name: str) -> str:
+    """``name`` as a SQL identifier: double-quoted only when it is not a plain one."""
     return name if _IDENT.match(name) else '"' + name.replace('"', '""') + '"'

@@ -23,6 +23,8 @@ from ..seams import AssetSchema, Column, asset_fingerprint
 
 
 class FileCatalog:
+    """A catalog read from one YAML file in the format above; ``name`` defaults to the file's ``name:``."""
+
     def __init__(self, path: str | Path, name: str | None = None):
         self.path = Path(path)
         self._data = self._load()
@@ -30,6 +32,7 @@ class FileCatalog:
 
     @classmethod
     def from_spec(cls, arg: str, **kwargs: Any) -> FileCatalog:
+        """``arg`` is the YAML file's path."""
         return cls(arg, **kwargs)
 
     def _load(self) -> dict[str, Any]:
@@ -39,12 +42,15 @@ class FileCatalog:
         return data
 
     def reload(self) -> None:
+        """Read the file again; the catalog keeps what it loaded until then."""
         self._data = self._load()
 
     def list_assets(self) -> list[str]:
+        """The dataset keys under ``assets``, in file order."""
         return list((self._data.get("assets") or {}).keys())
 
     def describe(self, key: str) -> AssetSchema:
+        """The asset as loaded; an ``id`` in its entry becomes the ``uid`` a sync uses to spot renames."""
         spec = (self._data.get("assets") or {})[key] or {}
         cols = [
             Column(
@@ -65,6 +71,7 @@ class FileCatalog:
         )
 
     def fingerprint(self, key: str) -> str:
+        """``asset_fingerprint`` of the described asset: columns, descriptions, primary key and source."""
         return asset_fingerprint(self.describe(key))
 
     def write_back(self, key: str, facts: dict[str, Any]) -> None:

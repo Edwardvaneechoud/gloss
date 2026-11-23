@@ -34,6 +34,7 @@ NS_SEP = "::"
 
 
 class Kind(str, Enum):
+    """What a subject is: the part of a subject string before the first colon."""
     MODEL = "model"
     DATASET = "dataset"
     FIELD = "field"
@@ -49,6 +50,7 @@ def _check_part(what: str, value: str, original: str) -> None:
 
 @dataclass(frozen=True)
 class SubjectId:
+    """A parsed subject. ``str()`` gives the canonical string that is stored and logged."""
     kind: Kind
     dataset: str | None = None  # dataset key, for datasets, fields and dataset metrics
     name: str | None = None  # member name (field, relationship, metric, type)
@@ -57,6 +59,7 @@ class SubjectId:
     # -- construction -------------------------------------------------------
     @classmethod
     def parse(cls, value: str | SubjectId) -> SubjectId:
+        """Parse a subject string (a ``SubjectId`` passes through); ``ValueError`` when it is malformed."""
         if isinstance(value, SubjectId):
             return value
         if not isinstance(value, str) or ":" not in value:
@@ -94,26 +97,32 @@ class SubjectId:
 
     @classmethod
     def model(cls, namespace: str | None = None) -> SubjectId:
+        """The model subject: ledger-wide, or the one published from ``namespace``."""
         return cls(Kind.MODEL, namespace=namespace or None)
 
     @classmethod
     def for_dataset(cls, key: str) -> SubjectId:
+        """The subject of the dataset with key ``key``."""
         return cls(Kind.DATASET, dataset=key)
 
     @classmethod
     def for_field(cls, dataset: str, name: str) -> SubjectId:
+        """The subject of column ``name`` of ``dataset``."""
         return cls(Kind.FIELD, dataset=dataset, name=name)
 
     @classmethod
     def for_relationship(cls, name: str, namespace: str | None = None) -> SubjectId:
+        """A relationship subject; ``name`` may carry its namespace (``"sales::orders_customers"``)."""
         return cls._named(Kind.RELATIONSHIP, name, namespace)
 
     @classmethod
     def for_type(cls, name: str, namespace: str | None = None) -> SubjectId:
+        """A semantic type subject; ``name`` may carry its namespace (``"crm::email_address"``)."""
         return cls._named(Kind.TYPE, name, namespace)
 
     @classmethod
     def for_metric(cls, name: str, dataset: str | None = None, *, namespace: str | None = None) -> SubjectId:
+        """A metric of ``dataset`` or ``namespace`` (not both), else ledger-wide; ``name`` may hold one."""
         if dataset and namespace:
             raise ValueError("A metric belongs to a dataset or to a namespace, not both")
         if dataset:
@@ -170,6 +179,7 @@ class SubjectId:
 
 
 def subject(value: str | SubjectId) -> SubjectId:
+    """Shorthand for :meth:`SubjectId.parse`."""
     return SubjectId.parse(value)
 
 

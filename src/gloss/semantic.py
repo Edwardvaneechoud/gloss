@@ -24,6 +24,11 @@ if TYPE_CHECKING:
 
 
 class TypeSuggester:
+    """Source proposing a ``semantic_type`` for untyped fields whose name matches a type's ``name_patterns``.
+
+    Only accepted facts are read. ``dataset_prefix`` limits it to dataset keys starting with that text.
+    """
+
     source_id = "inferred:type-names"
 
     def __init__(self, confidence: float = 0.7, dataset_prefix: str | None = None):
@@ -32,9 +37,14 @@ class TypeSuggester:
 
     @classmethod
     def from_spec(cls, arg: str, **kwargs: Any) -> TypeSuggester:
+        """Build from a plugin spec: the argument is the dataset prefix, empty for every dataset."""
         return cls(dataset_prefix=arg or None, **kwargs)
 
     def proposals(self, gloss: Gloss) -> Iterator[Proposal]:
+        """One proposal per untyped field: the first type (by name) whose pattern matches and datatype fits.
+
+        A type or field without a ``datatype`` counts as compatible.
+        """
         state = gloss.snapshot([Status.ACCEPTED])
         rules = [
             (name, re.compile(p, re.IGNORECASE), t.attrs.get("datatype"))

@@ -67,6 +67,10 @@ def _entry_points(group: str) -> list[Any]:
 
 
 def available(kind: str) -> dict[str, str]:
+    """Plugin names of ``kind`` and where each comes from (``module:attr``).
+
+    Code registrations win over entry points, which win over built-ins.
+    """
     group = GROUPS[kind]
     found = dict(_BUILTINS.get(group, {}))
     for ep in _entry_points(group):
@@ -77,6 +81,10 @@ def available(kind: str) -> dict[str, str]:
 
 
 def load(kind: str, name: str) -> Any:
+    """The plugin class (or factory) called ``name``, in the order :func:`available` ranks them.
+
+    ``LookupError`` names what is installed.
+    """
     group = GROUPS[kind]
     if name in _REGISTERED[group]:
         return _REGISTERED[group][name]

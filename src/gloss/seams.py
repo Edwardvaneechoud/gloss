@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Column:
+    """One column as a catalog describes it."""
     name: str
     dtype: str  # the catalog's own type name; mapped to an Ossie datatype by gloss.types
     nullable: bool | None = None
@@ -41,6 +42,7 @@ class AssetSchema:
     uid: str | None = None  # the catalog's own id for the asset, if it has one (helps spot renames)
 
     def to_dict(self) -> dict[str, Any]:
+        """The shape kept as the asset's last known state for drift detection (no ``extra`` or ``uid``)."""
         return {
             "key": self.key,
             "columns": [asdict(c) for c in self.columns],
@@ -86,6 +88,7 @@ class Coverage:
     prefixes: tuple[str, ...] | None = None
 
     def speaks_for(self, key: str) -> bool:
+        """Whether this listing is authoritative for ``key``, so that its absence means the asset is gone."""
         from .ids import path_covers
 
         if not self.complete:
@@ -108,7 +111,8 @@ class Catalog(Protocol):
     def list_assets(self) -> Iterable[str]:
         """Dataset keys of every asset in scope."""
 
-    def describe(self, key: str) -> AssetSchema: ...
+    def describe(self, key: str) -> AssetSchema:
+        """The asset's current columns, description and keys, as the catalog knows them."""
 
     def fingerprint(self, key: str) -> str:
         """Changes whenever Gloss should look at the asset again (see :func:`asset_fingerprint`).
@@ -119,6 +123,7 @@ class Catalog(Protocol):
 
 @runtime_checkable
 class WritableCatalog(Catalog, Protocol):
+    """A catalog that accepted facts can be written back into."""
     def write_back(self, key: str, facts: dict[str, Any]) -> None:
         """Receive accepted facts for a dataset: ``{"description": ..., "fields": {name: {...}}}``."""
 
@@ -129,11 +134,14 @@ class Source(Protocol):
 
     source_id: str
 
-    def proposals(self, gloss: Gloss) -> Iterable[Proposal]: ...
+    def proposals(self, gloss: Gloss) -> Iterable[Proposal]:
+        """The facts this source would state; Gloss and the policy decide what becomes of them."""
 
 
 @runtime_checkable
 class Sink(Protocol):
+    """Publishes the ledger's accepted state somewhere: Ossie files, git, back into a catalog."""
     name: str
 
-    def publish(self, gloss: Gloss, **options: Any) -> Any: ...
+    def publish(self, gloss: Gloss, **options: Any) -> Any:
+        """Publish the ledger's accepted state; the options and the result are the sink's own."""

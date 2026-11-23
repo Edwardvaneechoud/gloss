@@ -48,6 +48,7 @@ def _server_class() -> Any:
 
 
 def build_server(gloss: Gloss, *, agent: str = "assistant") -> Any:
+    """An MCP server whose tools read and propose as ``ai:<agent>``, or as the bound person via that agent."""
     Server = _server_class()
     server = Server(
         name="gloss",
@@ -103,4 +104,5 @@ def build_server(gloss: Gloss, *, agent: str = "assistant") -> Any:
 
 
 def run(gloss: Gloss, *, agent: str = "assistant", transport: str = "stdio") -> None:
+    """Build the MCP server and serve it over ``transport`` (stdio, sse or streamable-http) until stopped."""
     build_server(gloss, agent=agent).run(transport=transport)

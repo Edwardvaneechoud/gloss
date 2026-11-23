@@ -36,10 +36,17 @@ class _PlainDumper(yaml.SafeDumper):
 
 @dataclass
 class ExportResult:
+    """An exported Ossie document plus warnings about what was skipped or looks inconsistent.
+
+    Dataset keys export under their short name (``crm.orders`` as ``orders``), or as ``crm_orders``
+    when two datasets share one, so metric SQL written against the short name can then break.
+    """
+
     document: dict[str, Any]
     warnings: list[str] = field(default_factory=list)
 
     def to_yaml(self) -> str:
+        """The document as YAML, in field order and without anchors or aliases."""
         return yaml.dump(self.document, Dumper=_PlainDumper, sort_keys=False, allow_unicode=True, width=100)
 
 
@@ -302,9 +309,11 @@ class OssieSink:
 
     @classmethod
     def from_spec(cls, arg: str, **kwargs: Any) -> OssieSink:
+        """``arg`` is the output file's path."""
         return cls(arg, **kwargs)
 
     def publish(self, gloss: Gloss, **options: Any) -> ExportResult:
+        """Export with ``options`` over the constructor's defaults; writes the file when a path is set."""
         opts = {**self.defaults, **options}
         path = opts.pop("path", None) or self.path
         result = to_ossie(gloss, **opts)

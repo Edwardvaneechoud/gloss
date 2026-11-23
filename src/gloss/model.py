@@ -17,12 +17,16 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .ids import NS_SEP, Kind, SubjectId
 
+if TYPE_CHECKING:
+    from .actors import Actor
+
 
 class Status(str, Enum):
+    """Where an assertion is in the review workflow; only *accepted* facts make up the published model."""
     PROPOSED = "proposed"  # modelled, not yet reviewed
     REVIEWED = "reviewed"  # a reviewer looked at it and approved; awaiting acceptance
     ACCEPTED = "accepted"  # part of the published model
@@ -37,10 +41,12 @@ LIVE_STATUSES = OPEN_STATUSES | {Status.ACCEPTED}
 
 
 class InvalidTransition(ValueError):
+    """An event cannot be applied to an assertion in its current status."""
     pass
 
 
 class Confidentiality(str, Enum):
+    """How sensitive a subject is. Levels compare by rank: public < internal < confidential < restricted."""
     PUBLIC = "public"
     INTERNAL = "internal"
     CONFIDENTIAL = "confidential"
@@ -48,10 +54,12 @@ class Confidentiality(str, Enum):
 
     @property
     def rank(self) -> int:
+        """Position in the order, used to compare levels and to store them as integers."""
         return _CONF_ORDER.index(self)
 
     @classmethod
     def from_rank(cls, rank: int) -> Confidentiality:
+        """The level at ``rank`` (the inverse of :attr:`rank`)."""
         return _CONF_ORDER[rank]
 
     def __ge__(self, other: Confidentiality) -> bool:  # type: ignore[override]
@@ -133,10 +141,12 @@ def register_attribute(
 
 
 def attribute(name: str) -> AttributeSpec | None:
+    """The registered spec for ``name``, or None when this process does not know it."""
     return _ATTRIBUTES.get(name)
 
 
 def attributes_for(kind: Kind) -> frozenset[str]:
+    """Names of the registered attributes a subject of ``kind`` may state."""
     return frozenset(n for n, s in _ATTRIBUTES.items() if kind in s.kinds)
 
 
@@ -146,6 +156,7 @@ def inherited_attributes() -> tuple[str, ...]:
 
 
 def detail_attributes() -> frozenset[str]:
+    """Attributes whose values are withheld from readers below the subject's confidentiality level."""
     return frozenset(n for n, s in _ATTRIBUTES.items() if s.detail)
 
 
@@ -311,11 +322,13 @@ def validate_value(subject: SubjectId, attribute_name: str, value: Any) -> Any:
 
 
 def value_hash(value: Any) -> str:
+    """A short, stable hash of a JSON value, so facts with equal values are found by index."""
     blob = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
 class EventType(str, Enum):
+    """The kinds of event in the log. Their values are written into events, so they never change."""
     PROPOSED = "proposed"
     CORROBORATED = "corroborated"  # another source stated the same value
     REVIEWED = "reviewed"
@@ -366,19 +379,23 @@ TRANSITIONS: dict[Status, frozenset[Status]] = _transitions()
 
 
 def can_apply(event_type: EventType, status: Status) -> bool:
+    """Whether a status-changing event may apply to an assertion in ``status`` (False for other events)."""
     return status in EVENT_FROM_STATUSES.get(event_type, frozenset())
 
 
 def utcnow() -> datetime:
+    """The current time as timezone-aware UTC, the only kind Gloss stores."""
     return datetime.now(timezone.utc)
 
 
 def new_id() -> str:
+    """A fresh random id (32 hex characters) for events, assertions and correlations."""
     return uuid.uuid4().hex
 
 
 @dataclass(frozen=True)
 class Event:
+    """One entry in the append-only log. Never edited; an assertion's state is the fold of its events."""
     type: EventType
     assertion_id: str
     actor: str
@@ -396,6 +413,7 @@ class Event:
         return f"<{seq}{self.type.value} {self.assertion_id[:8]} by {self.actor} {self.ts:%Y-%m-%d %H:%M:%S}{extra}>"
 
     def to_dict(self) -> dict[str, Any]:
+        """JSON-ready form; :meth:`from_dict` reverses it."""
         return {
             "seq": self.seq,
             "id": self.id,
@@ -410,6 +428,7 @@ class Event:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Event:
+        """Rebuild an event from :meth:`to_dict` output."""
         return cls(
             EventType(d["type"]), d["assertion_id"], d["actor"], d.get("data") or {}, d["id"],
             datetime.fromisoformat(d["ts"]), d.get("seq"), d.get("correlation"), d.get("via"),
@@ -418,6 +437,10 @@ class Event:
 
 @dataclass(frozen=True)
 class Assertion:
+    """The current state of one fact: one value for one attribute of one subject, with its status and sources.
+
+    A projection of the fact's events (see :func:`apply_event`); never written directly.
+    """
     id: str
     subject: str
     attribute: str
@@ -436,14 +459,17 @@ class Assertion:
 
     @property
     def subject_id(self) -> SubjectId:
+        """The subject parsed into a :class:`~gloss.ids.SubjectId`."""
         return SubjectId.parse(self.subject)
 
     @property
     def dataset(self) -> str | None:
+        """The dataset the subject belongs to, or None for ledger-wide and namespace subjects."""
         return self.subject_id.owning_dataset
 
     @property
     def scope_path(self) -> str | None:
+        """The dotted path access rules apply to (dataset key or namespace); None when ledger-wide."""
         return self.subject_id.scope_path
 
     def __repr__(self) -> str:
@@ -454,16 +480,19 @@ class Assertion:
         return f"<{self.status.value} {self.subject} {self.attribute}={v!r} by {self.source}{conf} id={self.id[:8]}>"
 
     @property
-    def source_actor(self):  # -> gloss.actors.Actor
+    def source_actor(self) -> Actor:
+        """The source as an :class:`~gloss.actors.Actor`, parsed from its ``kind:id`` string."""
         from .actors import Actor
 
         return Actor.parse(self.source)
 
     @property
     def is_open(self) -> bool:
+        """Whether it still awaits a decision: proposed, reviewed or stale."""
         return self.status in OPEN_STATUSES
 
     def to_dict(self) -> dict[str, Any]:
+        """JSON-ready form; ``redacted`` appears only when the value was withheld from the reader."""
         out = {
             "id": self.id,
             "subject": self.subject,
@@ -486,6 +515,7 @@ class Assertion:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Assertion:
+        """Rebuild an assertion from :meth:`to_dict` output."""
         return cls(
             id=d["id"], subject=d["subject"], attribute=d["attribute"], value=d.get("value"),
             source=d["source"], status=Status(d["status"]), confidence=d.get("confidence"),

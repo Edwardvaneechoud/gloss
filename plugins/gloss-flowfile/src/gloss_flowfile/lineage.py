@@ -40,6 +40,8 @@ _ATTRS = ("confidentiality", "classification", "description")
 
 
 class LineageSource:
+    """Source plugin: proposes confidentiality, classification and descriptions along table lineage."""
+
     source_id = "inferred:flowfile-lineage"
 
     def __init__(self, catalog: FlowfileCatalog):
@@ -47,6 +49,7 @@ class LineageSource:
 
     @classmethod
     def from_spec(cls, arg: str, **kwargs: Any) -> LineageSource:
+        """``arg`` is a Flowfile base URL, as for ``FlowfileCatalog.from_spec``."""
         return cls(FlowfileCatalog.from_spec(arg, **kwargs))
 
     def upstream(self) -> dict[str, list[tuple[str, str | None]]]:
@@ -68,6 +71,7 @@ class LineageSource:
         return out
 
     def proposals(self, gloss: Gloss) -> Iterator[Proposal]:
+        """Accepted upstream facts proposed for same-named downstream columns (and tables) lacking one."""
         lineage = self.upstream()
         columns = {key: [c.name for c in self.catalog.describe(key).columns] for key in lineage}
 

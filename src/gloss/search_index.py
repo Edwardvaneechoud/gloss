@@ -36,6 +36,7 @@ _TOKEN = re.compile(r"[^\W_]+", re.UNICODE)  # words; underscores and punctuatio
 
 
 def tokens(text: str) -> list[str]:
+    """The lower-cased words of ``text`` (underscores and punctuation split them), at most 16."""
     return [t.lower() for t in _TOKEN.findall(text)][:16]
 
 
@@ -47,6 +48,7 @@ STOPWORDS = frozenset(
 
 
 def content_tokens(text: str) -> list[str]:
+    """The words of a question without stopwords, or all of them when nothing else is left."""
     words = tokens(text)
     kept = [w for w in words if w not in STOPWORDS]
     return kept or words
@@ -116,6 +118,11 @@ def expand(gloss: Gloss, subjects: Iterable[str]) -> set[str]:
 
 
 def build_rows(gloss: Gloss, subjects: Iterable[str]) -> list[dict[str, Any]]:
+    """Index rows for ``subjects`` from their accepted facts; a subject without any gets no row.
+
+    Fields take inherited attributes from their semantic type, and levels are inherited as in
+    :mod:`gloss.visibility`.
+    """
     subjects = set(subjects)
     attrs: dict[str, dict[str, Any]] = defaultdict(dict)
     for a in gloss.store.find_for_subjects(subjects, [Status.ACCEPTED]):
@@ -197,6 +204,7 @@ def reindex(gloss: Gloss, subjects: Iterable[str], *, cascade: Iterable[str] | N
 
 
 def rebuild(gloss: Gloss, *, chunk: int = 2000) -> int:
+    """Recreate the whole index from accepted facts, stamped :data:`INDEX_VERSION`. Returns the row count."""
     gloss.store.set_meta("search_index_version", INDEX_VERSION)
     gloss.store.clear_search()
     gloss.store.recreate_search_tables()

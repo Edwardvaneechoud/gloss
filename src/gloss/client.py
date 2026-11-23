@@ -36,6 +36,8 @@ Send = Callable[[str, str, Mapping[str, Any] | None, Any], tuple[int, Any]]
 
 
 class RemoteError(RuntimeError):
+    """An error answer from the server that has no local exception; carries its ``status`` and ``detail``."""
+
     def __init__(self, status: int, detail: Any):
         super().__init__(f"Gloss server answered {status}: {detail}")
         self.status, self.detail = status, detail
@@ -79,6 +81,12 @@ def _clean(params: Mapping[str, Any]) -> dict[str, Any]:
 
 
 class Client:
+    """A ledger served by :mod:`gloss.server`, used like an actor-bound ``Gloss`` view.
+
+    Error answers come back as the local exceptions: 403 as ``PermissionDenied``, 404 as ``KeyError``,
+    422 as ``InvalidTransition`` or ``ValueError``, anything else (409 included) as ``RemoteError``.
+    """
+
     def __init__(self, base_url: str = "", *, headers: Mapping[str, str] | None = None,
                  send: Send | None = None, timeout: float = 30.0):
         self.base_url = base_url.rstrip("/")
@@ -103,42 +111,55 @@ class Client:
 
     # -- reads ------------------------------------------------------------------
     def find(self, **criteria: Any) -> list[Assertion]:
+        """One page of assertions matching ``criteria`` (``GET /assertions``; 200 unless ``limit`` says)."""
         params = dict(criteria)
         if "statuses" in params:
             params["status"] = params.pop("statuses")
         return [Assertion.from_dict(a) for a in self._call("GET", "/assertions", params)["items"]]
 
     def count(self, **criteria: Any) -> int:
+        """How many assertions match ``criteria``: the ``total`` of ``GET /assertions``."""
         params = {**criteria, "limit": 1}
         if "statuses" in params:
             params["status"] = params.pop("statuses")
         return self._call("GET", "/assertions", params)["total"]
 
     def pending(self, **criteria: Any) -> list[Assertion]:
+        """Open assertions (proposed, reviewed, stale) matching ``criteria``; one page, like ``find``."""
         criteria.setdefault("statuses", list(OPEN_STATUSES))
         return self.find(**criteria)
 
     def get(self, assertion_id: str) -> Assertion:
+        """One assertion by id or unambiguous id prefix (``GET /assertions/{id}``)."""
         return Assertion.from_dict(self._call("GET", f"/assertions/{assertion_id}"))
 
     def current(self, subject: str | SubjectId) -> dict[str, Any]:
+        """Accepted value per attribute for one subject (``GET /subjects/{subject}``)."""
         return self._call("GET", f"/subjects/{self._subject(subject)}")["current"]
 
     def version(self, subject: str | SubjectId) -> int | None:
+        """Version of the subject's accepted definition, see ``Gloss.version`` (``GET /subjects/{s}``)."""
         return self._call("GET", f"/subjects/{self._subject(subject)}")["version"]
 
     def history(self, subject: str | SubjectId) -> list[Event]:
+        """Every event of the facts now at ``subject`` (``GET /subjects/{subject}/history``)."""
         return [Event.from_dict(e) for e in self._call("GET", f"/subjects/{self._subject(subject)}/history")]
 
     def log(self, after_seq: int = 0, limit: int | None = None, *, correlation: str | None = None) -> list[Event]:
+        """Events after ``after_seq`` in ``seq`` order (``GET /log``; 500 unless ``limit`` is given)."""
         params = {"after_seq": after_seq, "limit": limit, "correlation": correlation}
         return [Event.from_dict(e) for e in self._call("GET", "/log", params)]
 
     def progress(self, dataset_prefix: str | None = None) -> dict[str, dict[str, int]]:
+        """Review progress per dataset or namespace: ``{path: {status: count}}`` (``GET /progress``)."""
         return self._call("GET", "/progress", {"dataset_prefix": dataset_prefix})
 
     def search(self, text: str, *, kinds: Sequence[str] | None = None, dataset_prefix: str | None = None,
                limit: int = 20, for_ai: bool | None = None) -> list[dict[str, Any]]:
+        """Ranked search as the caller (``GET /search``).
+
+        ``for_ai`` asks ``GET /ai/search`` instead, which ignores ``kinds`` and ``dataset_prefix``.
+        """
         path = "/ai/search" if for_ai else "/search"
         params = {"q": text, "limit": limit} if for_ai else {
             "q": text, "kind": kinds, "dataset_prefix": dataset_prefix, "limit": limit}
@@ -149,22 +170,28 @@ class Client:
         return self._call("GET", "/tables", {"prefix": prefix, "include_pending": include_pending})
 
     def table(self, key: str, *, include_pending: bool = False) -> dict[str, Any]:
+        """One table as a plain dict, the server's ``TableOut`` (``GET /tables/{key}``)."""
         return self._call("GET", f"/tables/{urllib.parse.quote(key)}", {"include_pending": include_pending})
 
     def relationships(self, table: str | None = None, *, include_pending: bool = False) -> list[dict[str, Any]]:
+        """Relationships as dicts, optionally only those touching ``table`` (``GET /relationships``)."""
         return self._call("GET", "/relationships", {"table": table, "include_pending": include_pending})
 
     def metrics(self, table: str | None = None, *, include_pending: bool = False) -> list[dict[str, Any]]:
+        """Metrics as dicts; with ``table`` only that table's (``GET /metrics``)."""
         return self._call("GET", "/metrics", {"table": table, "include_pending": include_pending})
 
     def semantic_types(self, *, include_pending: bool = False) -> list[dict[str, Any]]:
+        """Semantic types as dicts, each with a ``used_by`` count (``GET /types``)."""
         return self._call("GET", "/types", {"include_pending": include_pending})
 
     def model_context(self, datasets: list[str] | None = None) -> dict[str, Any]:
+        """The accepted model as compact JSON for an AI, within its visibility limit (``GET /ai/context``)."""
         return self._call("GET", "/ai/context", {"dataset": datasets})
 
     def to_yaml(self, *, name: str | None = None, include_pending: bool = False,
                 namespace: str | None = None) -> str:
+        """The model as Ossie YAML text (``GET /export/ossie``)."""
         return self._call("GET", "/export/ossie",
                           {"name": name, "include_pending": include_pending, "namespace": namespace})
 
@@ -172,6 +199,7 @@ class Client:
     def propose(self, subject: str | SubjectId, attribute: str, value: Any, *, source: str | None = None,
                 confidence: float | None = None, evidence: Sequence[dict[str, Any]] | None = None,
                 comment: str | None = None, accept: bool = False, group: str | None = None) -> Assertion:
+        """Propose one fact (``POST /assertions``); ``accept=True`` asks to accept it at once."""
         body = {"subject": str(subject), "attribute": attribute, "value": value, "source": source,
                 "confidence": confidence, "evidence": list(evidence or []), "comment": comment,
                 "accept": accept, "group": group}
@@ -179,6 +207,7 @@ class Client:
 
     def propose_many(self, proposals: Iterable[Proposal], *, source: str | None = None, accept: bool = False,
                      comment: str | None = None) -> list[ProposeResult]:
+        """Propose many facts in one request (``POST /proposals``), de-duplicated by the server."""
         body = {
             "proposals": [
                 {"subject": p.subject, "attribute": p.attribute, "value": p.value, "confidence": p.confidence,
@@ -196,37 +225,47 @@ class Client:
         )
 
     def review(self, assertion_id: str, *, comment: str | None = None) -> Assertion:
+        """Mark an assertion reviewed (``POST /assertions/{id}/review``)."""
         return self._act("review", assertion_id, comment)
 
     def accept(self, assertion_id: str, *, comment: str | None = None) -> Assertion:
+        """Accept an assertion (``POST /assertions/{id}/accept``)."""
         return self._act("accept", assertion_id, comment)
 
     def reject(self, assertion_id: str, *, comment: str | None = None) -> Assertion:
+        """Reject an assertion (``POST /assertions/{id}/reject``)."""
         return self._act("reject", assertion_id, comment)
 
     def retract(self, assertion_id: str, *, comment: str | None = None) -> Assertion:
+        """Withdraw an assertion, accepted or not (``POST /assertions/{id}/retract``)."""
         return self._act("retract", assertion_id, comment)
 
     def reopen(self, assertion_id: str, *, comment: str | None = None) -> Assertion:
+        """Send a rejected or reviewed assertion back to proposed (``POST /assertions/{id}/reopen``)."""
         return self._act("reopen", assertion_id, comment)
 
     def restore(self, assertion_id: str, *, comment: str | None = None) -> Assertion:
+        """Put a superseded value back as the accepted one (``POST /assertions/{id}/restore``)."""
         return self._act("restore", assertion_id, comment)
 
     def transition_many(self, action: str, assertion_ids: Iterable[str], *, comment: str | None = None
                         ) -> tuple[list[Assertion], list[tuple[str, str]]]:
+        """Apply one action to many assertions (``POST /bulk/{action}``): ``(changed, [(id, error)])``."""
         res = self._call("POST", f"/bulk/{action}", body={"ids": list(assertion_ids), "comment": comment})
         return [Assertion.from_dict(a) for a in res["changed"]], [(e["id"], e["error"]) for e in res["errors"]]
 
     def accept_group(self, group: str, *, comment: str | None = None) -> list[Assertion]:
+        """Accept every open fact of one proposal group, all or nothing (``POST /groups/{group}/accept``)."""
         return [Assertion.from_dict(a) for a in self._call("POST", f"/groups/{group}/accept",
                                                            body={"comment": comment})]
 
     def reject_group(self, group: str, *, comment: str | None = None) -> list[Assertion]:
+        """Reject every open fact of one proposal group, all or nothing (``POST /groups/{group}/reject``)."""
         return [Assertion.from_dict(a) for a in self._call("POST", f"/groups/{group}/reject",
                                                            body={"comment": comment})]
 
     def record_check_results(self, results: Iterable[Any], *, run_id: str | None = None) -> str:
+        """Log a run of check results and return its run id (``POST /checks/results``)."""
         body = {"results": [r.to_dict() for r in results], "run_id": run_id}
         return self._call("POST", "/checks/results", body=body)["run_id"]
 
@@ -249,6 +288,7 @@ class Federation:
         return seen + ([self.default] if self.default is not None and self.default not in seen else [])
 
     def owner(self, subject: str | SubjectId) -> Any:
+        """The ledger whose longest prefix covers the subject's path, else ``default`` (or ``KeyError``)."""
         path = SubjectId.parse(subject).scope_path
         for prefix, ledger in self.ledgers.items():
             if path is not None and path_covers(prefix, path):
@@ -278,29 +318,37 @@ class Federation:
 
     # -- reads ------------------------------------------------------------------
     def find(self, **criteria: Any) -> list[Assertion]:
+        """Matching assertions from the owning ledger, or from all of them, sorted by subject."""
         rows = [a for ledger in self._targets(criteria) for a in ledger.find(**criteria)]
         return sorted(rows, key=lambda a: (a.subject, a.attribute, a.created_at))
 
     def pending(self, **criteria: Any) -> list[Assertion]:
+        """Open assertions (proposed, reviewed, stale) from the ledgers ``find`` would ask."""
         criteria.setdefault("statuses", list(OPEN_STATUSES))
         return self.find(**criteria)
 
     def count(self, **criteria: Any) -> int:
+        """The sum of ``count`` over the ledgers ``find`` would ask."""
         return sum(ledger.count(**criteria) for ledger in self._targets(criteria))
 
     def get(self, assertion_id: str) -> Assertion:
+        """One assertion, from the first ledger that holds its id."""
         return self._holding(assertion_id).get(assertion_id)
 
     def current(self, subject: str | SubjectId) -> dict[str, Any]:
+        """Accepted value per attribute for one subject, from its owner."""
         return self.owner(subject).current(subject)
 
     def version(self, subject: str | SubjectId) -> int | None:
+        """Version of the subject's accepted definition, from its owner."""
         return self.owner(subject).version(subject)
 
     def history(self, subject: str | SubjectId) -> list[Event]:
+        """Every event of the facts now at ``subject``, from its owner."""
         return self.owner(subject).history(subject)
 
     def progress(self, dataset_prefix: str | None = None) -> dict[str, dict[str, int]]:
+        """Review progress from every ledger, merged and sorted by path."""
         out: dict[str, dict[str, int]] = {}
         for ledger in self._all():
             out.update(ledger.progress(dataset_prefix))
@@ -315,13 +363,16 @@ class Federation:
         return out[:limit]
 
     def table(self, key: str, **options: Any) -> Any:
+        """One table, from the ledger that owns its key."""
         return self._owner_of_key(key).table(key, **options)
 
     def tables(self, prefix: str | None = None, **options: Any) -> list[Any]:
+        """Tables from every ledger, one ledger after another."""
         return [t for ledger in self._all() for t in ledger.tables(prefix, **options)]
 
     # -- writes -----------------------------------------------------------------
     def propose(self, subject: str | SubjectId, attribute: str, value: Any, **options: Any) -> Assertion:
+        """Propose a fact to the ledger that owns its subject."""
         return self.owner(subject).propose(subject, attribute, value, **options)
 
     def propose_many(self, proposals: Iterable[Proposal], **options: Any) -> list[ProposeResult]:
@@ -342,19 +393,25 @@ class Federation:
         return getattr(self._holding(assertion_id), action)(assertion_id, **options)
 
     def review(self, assertion_id: str, **options: Any) -> Assertion:
+        """Mark an assertion reviewed, in the ledger holding it."""
         return self._act("review", assertion_id, **options)
 
     def accept(self, assertion_id: str, **options: Any) -> Assertion:
+        """Accept an assertion, in the ledger holding it."""
         return self._act("accept", assertion_id, **options)
 
     def reject(self, assertion_id: str, **options: Any) -> Assertion:
+        """Reject an assertion, in the ledger holding it."""
         return self._act("reject", assertion_id, **options)
 
     def retract(self, assertion_id: str, **options: Any) -> Assertion:
+        """Withdraw an assertion, in the ledger holding it."""
         return self._act("retract", assertion_id, **options)
 
     def reopen(self, assertion_id: str, **options: Any) -> Assertion:
+        """Send an assertion back to proposed, in the ledger holding it."""
         return self._act("reopen", assertion_id, **options)
 
     def restore(self, assertion_id: str, **options: Any) -> Assertion:
+        """Put a superseded value back as the accepted one, in the ledger holding it."""
         return self._act("restore", assertion_id, **options)

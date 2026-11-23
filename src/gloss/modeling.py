@@ -134,6 +134,7 @@ class SemanticType:
 
     @property
     def subject(self) -> SubjectId:
+        """The ``type:`` subject this type's facts are stated about."""
         return SubjectId.for_type(self.name, self.namespace)
 
     @property
@@ -143,9 +144,11 @@ class SemanticType:
 
     @property
     def resolved_dtype(self) -> DType | None:
+        """The precise type, e.g. ``String(320)``, rebuilt from the physical and Ossie types."""
         return parse_dtype(self.physical_type, self.datatype)
 
     def proposals(self) -> Iterator[Proposal]:
+        """One proposal per attribute that is set; checks are normalised to their stored form."""
         from .checks import normalise
         from .ledger import Proposal
 
@@ -160,7 +163,8 @@ class SemanticType:
 
     @classmethod
     def load(cls, gloss: Gloss, name: str, *, include_pending: bool = False) -> SemanticType:
-        ref = SubjectId.for_type(name).ref
+        """Read a type back from the ledger (accepted facts; optionally open proposals too)."""
+        ref =SubjectId.for_type(name).ref
         state = gloss.snapshot(read_statuses(include_pending), datasets=[], relationships=False)
         if ref not in state.types:
             raise KeyError(f"No semantic type {name!r}")
@@ -178,6 +182,13 @@ class SemanticType:
 
 @dataclass(eq=False)  # identity semantics: columns are hashable and can key `on={...}`
 class Column:
+    """A column of a table: ``Column("amount", Decimal(18, 2), description="Order total")``.
+
+    The datatype may be a Gloss type, an Ossie name, a catalog type name, a Python type or a
+    ``SemanticType``, whose attributes the column inherits. Columns compare by identity, so they
+    can key a relationship's ``on={...}``; a column belongs to at most one table.
+    """
+
     name: str
     datatype: DatatypeLike = None  # stored as the Ossie name after construction
     expression: str | dict[str, Any] | None = None  # defaults to the column name on export
@@ -208,6 +219,7 @@ class Column:
 
     @property
     def semantic_type_name(self) -> str | None:
+        """The semantic type's reference, whether it was given as an object or a name."""
         st = self.semantic_type
         return st.ref if isinstance(st, SemanticType) else st
 
@@ -220,6 +232,7 @@ class Column:
         return own
 
     def facts(self) -> Iterator[tuple[str, Any]]:
+        """The column's own ``(attribute, value)`` pairs that are set; inherited ones are not repeated."""
         from .checks import normalise
 
         yield from _facts(
@@ -233,6 +246,7 @@ class Column:
 
     @property
     def qualified_name(self) -> str:
+        """``table.column`` once the column belongs to a table, else the bare name."""
         return f"{self.table}.{self.name}" if self.table else self.name
 
 
@@ -271,14 +285,17 @@ class Metric:
 
     @property
     def subject(self) -> SubjectId:
+        """The ``metric:`` subject: scoped to its table, its namespace, or the whole ledger."""
         return SubjectId.for_metric(self.name, self.table, namespace=self.namespace)
 
     def facts(self) -> Iterator[tuple[str, Any]]:
+        """The metric's ``(attribute, value)`` pairs that are set."""
         yield from _facts(
             self, ("expression", "datatype", *_COMMON, "aggregate", "filter", "time_column", "dimensions", "format")
         )
 
     def proposals(self) -> Iterator[Proposal]:
+        """The metric's facts as one review group, so the definition is accepted or rejected whole."""
         from .ledger import Proposal
 
         group = new_id()  # a metric's facts are reviewed as one definition
@@ -317,6 +334,7 @@ class Relationship:
 
     @property
     def subject(self) -> SubjectId:
+        """The ``relationship:`` subject this join's facts are stated about."""
         return SubjectId.for_relationship(self.name, self.namespace)
 
     def __post_init__(self) -> None:
@@ -347,6 +365,7 @@ class Relationship:
         return key, [c.name if isinstance(c, Column) else c for c in cols]
 
     def proposals(self) -> Iterator[Proposal]:
+        """The join's tables, columns and descriptions as one review group."""
         from .ledger import Proposal
 
         subj = str(self.subject)
@@ -361,6 +380,12 @@ class Relationship:
 
 @dataclass
 class Table:
+    """A dataset, keyed by its Gloss key (``shop.returns``), with its columns and table metrics.
+
+    ``source`` names the physical table or view and defaults to the key on export. Columns given
+    in ``primary_key`` or ``unique_keys`` are added to the table; ``t["col"]`` returns a column.
+    """
+
     key: str  # Gloss dataset key, e.g. "shop.returns"
     source: str | None = None  # physical table/view; defaults to the key on export
     description: str | None = None
@@ -415,16 +440,19 @@ class Table:
         return self
 
     def add_columns(self, *columns: Column) -> Table:
+        """Add several columns; returns the table for chaining."""
         for c in columns:
             self.add_column(c)
         return self
 
     def add_metric(self, metric: Metric) -> Table:
+        """Attach a metric to this table, replacing one of the same name."""
         metric.table = self.key
         self.metrics[metric.name] = metric
         return self
 
     def column(self, name: str) -> Column:
+        """The column called ``name``; ``KeyError`` if there is none."""
         return self.columns[name]
 
     def __getitem__(self, name: str) -> Column:
@@ -441,6 +469,11 @@ class Table:
 
     # -- saving -------------------------------------------------------------
     def proposals(self) -> Iterator[Proposal]:
+        """Proposals for the table, its columns' semantic types, its columns and its metrics.
+
+        A column with neither an expression nor a datatype still gets ``expression`` so it leaves
+        a trace in the ledger.
+        """
         from .ledger import Proposal
 
         ds = str(SubjectId.for_dataset(self.key))
@@ -503,10 +536,12 @@ class Table:
 
 # ---------------------------------------------------------------------- reading helpers
 def read_statuses(include_pending: bool) -> list[Status]:
+    """The statuses a reader sees: accepted, plus proposed and reviewed when ``include_pending``."""
     return [Status.ACCEPTED] + ([Status.PROPOSED, Status.REVIEWED] if include_pending else [])
 
 
 def types_from_state(state: Any) -> dict[str, SemanticType]:
+    """Every semantic type in a snapshot, keyed by its reference."""
     return {n: SemanticType._from_attrs(n, e.attrs) for n, e in state.types.items()}
 
 
@@ -541,6 +576,11 @@ def relationship_from_attrs(name: str, attrs: dict[str, Any]) -> Relationship | 
 
 @dataclass
 class AddResult:
+    """What ``Gloss.add`` / ``Gloss.apply`` did, counted per fact: new, corroborated, unchanged, etc.
+
+    ``previously_rejected`` facts were skipped because the same value was rejected before.
+    """
+
     created: int = 0
     corroborated: int = 0
     unchanged: int = 0

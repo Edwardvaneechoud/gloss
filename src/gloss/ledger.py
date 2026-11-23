@@ -69,6 +69,7 @@ class Proposal:
 
 @dataclass
 class ProposeResult:
+    """What became of one proposal: the assertion it landed on, how, and whether it was accepted at once."""
     assertion: Assertion
     outcome: str  # "created" | "corroborated" | "unchanged" | "previously_rejected"
     accepted: bool = False  # accepted in this same call (asked for, or by a policy rule)
@@ -152,6 +153,11 @@ class _Batch:
 
 
 class Gloss:
+    """The ledger facade: proposals, review transitions, readers, search and export over one store.
+
+    Unbound, it is the host's trusted handle and reads everything; :meth:`as_actor` returns a view whose
+    reads are scoped and redacted by the policy and whose writes are made as that actor.
+    """
     def __init__(self, store: SQLStore, policy: Policy | None = None, *, directory: ActorDirectory | None = None):
         self.store = store
         self.policy: Policy = policy or DefaultPolicy()
@@ -273,6 +279,10 @@ class Gloss:
         return lambda: self._shared.readers.remove(callback)
 
     def report_read(self, tool: str, subjects: Iterable[str]) -> None:
+        """Tell the ``on_read`` hooks that ``tool`` handed ``subjects`` to this view's actor.
+
+        A failing hook is logged, never raised: a host's bookkeeping must not break a read.
+        """
         if not self._shared.readers:
             return
         record = ReadRecord(self.actor, self.context.via if self.context else None, tool, tuple(subjects))
@@ -347,6 +357,7 @@ class Gloss:
         accept: bool = False,
         group: str | None = None,
     ) -> Assertion:
+        """Propose one fact and return the assertion it landed on; see :meth:`propose_many` for the rules."""
         return self.propose_many(
             [Proposal(str(subject), attribute, value, confidence, list(evidence or []), comment, group)],
             source=source,
@@ -610,18 +621,29 @@ class Gloss:
         return next(a for a in done if a.id == aid)
 
     def review(self, assertion_id: str, *, actor: str | None = None, comment: str | None = None) -> Assertion:
+        """Mark a fact reviewed: a reviewer approved it, and it still awaits acceptance."""
         return self._transition(assertion_id, P.REVIEW, actor, comment)
 
     def accept(self, assertion_id: str, *, actor: str | None = None, comment: str | None = None) -> Assertion:
+        """Make a fact the accepted value, superseding the one accepted before.
+
+        For a relationship or metric, the rest of its proposal group is accepted with it, or nothing is.
+        """
         return self._transition(assertion_id, P.ACCEPT, actor, comment)
 
     def reject(self, assertion_id: str, *, actor: str | None = None, comment: str | None = None) -> Assertion:
+        """Reject a fact; the same value proposed again is then ignored unless ``force``.
+
+        For a relationship or metric, the rest of its proposal group is rejected with it, or nothing is.
+        """
         return self._transition(assertion_id, P.REJECT, actor, comment)
 
     def retract(self, assertion_id: str, *, actor: str | None = None, comment: str | None = None) -> Assertion:
+        """Withdraw a fact, open or accepted (the default policy lets a source retract what it stated)."""
         return self._transition(assertion_id, P.RETRACT, actor, comment)
 
     def reopen(self, assertion_id: str, *, actor: str | None = None, comment: str | None = None) -> Assertion:
+        """Send a rejected or reviewed fact back to *proposed*."""
         return self._transition(assertion_id, P.REOPEN, actor, comment)
 
     def restore(self, assertion_id: str, *, actor: str | None = None, comment: str | None = None) -> Assertion:
@@ -629,6 +651,7 @@ class Gloss:
         return self._transition(assertion_id, P.RESTORE, actor, comment)
 
     def mark_stale(self, assertion_id: str, *, actor: str | None = None, reason: str) -> Assertion:
+        """Send a fact back to review because what it describes changed; ``reason`` goes on the event."""
         return self._transition(assertion_id, P.MARK_STALE, actor, reason, reason=reason)
 
     def accept_group(self, group: str, *, actor: str | None = None, comment: str | None = None) -> list[Assertion]:
@@ -636,6 +659,7 @@ class Gloss:
         return self._decide_group(P.ACCEPT, group, actor, comment)
 
     def reject_group(self, group: str, *, actor: str | None = None, comment: str | None = None) -> list[Assertion]:
+        """Reject every open fact of one proposal group, all or nothing."""
         return self._decide_group(P.REJECT, group, actor, comment)
 
     def _decide_group(self, action: str, group: str, actor: str | None, comment: str | None) -> list[Assertion]:
@@ -650,6 +674,7 @@ class Gloss:
         return done
 
     def comment(self, assertion_id: str, *, actor: str | None = None, comment: str) -> Assertion:
+        """Add a comment to a fact's history without changing its status."""
         actor = self._who(actor)
         current = self._require(assertion_id)
         if not self.policy.can(actor, P.COMMENT, current, self.context):
@@ -1131,9 +1156,14 @@ class Gloss:
         return a
 
     def get(self, assertion_id: str) -> Assertion:
+        """One assertion by id or short prefix, redacted; ``KeyError`` when unknown or out of scope."""
         return self._redact([self._require(assertion_id)])[0]
 
     def find(self, **criteria: Any) -> list[Assertion]:
+        """Assertions matching :class:`~gloss.store.Query` criteria, within this reader's scope and redacted.
+
+        For example ``subject=``, ``dataset=``, ``attribute=``, ``statuses=``, ``limit=``.
+        """
         if criteria.get("statuses") is not None:
             criteria["statuses"] = [Status(s) for s in criteria["statuses"]]
         return self._redact(self.store.find(self._q(**criteria)))
@@ -1226,6 +1256,7 @@ class Gloss:
         return self._redact_events(self.store.events_for_subject(str(sid)))
 
     def log(self, after_seq: int = 0, limit: int | None = None, *, correlation: str | None = None) -> list[Event]:
+        """Events after ``after_seq`` in ``seq`` order, optionally one ``correlation``; scoped, redacted."""
         return self._redact_events(
             self.store.events(after_seq=after_seq, limit=limit, correlation=correlation, scope=self._scope)
         )
@@ -1312,6 +1343,7 @@ class Gloss:
 
     # ----------------------------------------------------------------- search
     def rebuild_search_index(self) -> int:
+        """Recreate the search index from accepted facts. Returns the number of rows written."""
         from .search_index import rebuild
 
         return rebuild(self)
@@ -1433,6 +1465,7 @@ class Gloss:
         return min(candidates, key=len) if candidates else word
 
     def close(self) -> None:
+        """Close the underlying store."""
         self.store.close()
 
     def __enter__(self) -> Gloss:
@@ -1473,21 +1506,26 @@ class Entry:
 
     @property
     def own_attrs(self) -> dict[str, Any]:
+        """The attributes the subject states itself, without those inherited from its semantic type."""
         return {k: v for k, v in self.attrs.items() if k not in self.inherited}
 
     def set(self, attribute: str, a: Assertion) -> None:
+        """Record ``a`` as the assertion behind ``attribute``."""
         self.attrs[attribute] = a.value
         self.assertions[attribute] = a
 
     @property
     def all_accepted(self) -> bool:
+        """Whether every value here comes from an accepted fact (nothing is pending)."""
         return all(a.status is Status.ACCEPTED for a in self.assertions.values())
 
     def level(self, inherited: Confidentiality | None = None) -> Confidentiality:
+        """The subject's own confidentiality, else ``inherited``, else ``internal``."""
         raw = self.attrs.get("confidentiality")
         return Confidentiality(raw) if raw else inherited or Confidentiality.INTERNAL
 
     def withhold(self, level: Confidentiality, limit: Confidentiality) -> None:
+        """Drop detail attributes when ``level`` is above ``limit``, recording the level in ``redacted``."""
         if level > limit:
             for attr in detail_attributes() & self.attrs.keys():
                 del self.attrs[attr]
@@ -1498,6 +1536,7 @@ class Entry:
 
 @dataclass
 class DatasetEntry(Entry):
+    """A dataset in a snapshot, with its fields and its own metrics by name."""
     fields: dict[str, Entry] = field(default_factory=dict)
     metrics: dict[str, Entry] = field(default_factory=dict)
 
@@ -1549,6 +1588,7 @@ class ModelState:
             m.withhold(m.level(), limit)
 
     def usages(self, type_name: str) -> list[SubjectId]:
+        """Fields in this snapshot whose semantic type is ``type_name`` (e.g. ``crm::email_address``)."""
         return [
             SubjectId.for_field(dk, fk)
             for dk, d in self.datasets.items()
@@ -1557,9 +1597,11 @@ class ModelState:
         ]
 
     def dataset(self, key: str) -> DatasetEntry:
+        """The entry for dataset ``key``, created empty if the snapshot has none yet."""
         return self.datasets.setdefault(key, DatasetEntry())
 
     def add(self, sid: SubjectId, attribute: str, a: Assertion) -> None:
+        """Place one assertion in the entry of its subject."""
         if sid.kind is Kind.MODEL:
             (self.models.setdefault(sid.namespace, Entry()) if sid.namespace else self.model).set(attribute, a)
         elif sid.kind is Kind.DATASET:
@@ -1577,6 +1619,10 @@ class ModelState:
             self.types.setdefault(sid.ref, Entry()).set(attribute, a)
 
     def iter_subjects(self) -> Iterator[tuple[SubjectId, Entry]]:
+        """Every subject in the snapshot with its entry.
+
+        Covers models, datasets (with fields and metrics), relationships, metrics and semantic types.
+        """
         yield SubjectId.model(), self.model
         for ns, m in self.models.items():
             yield SubjectId.model(ns), m

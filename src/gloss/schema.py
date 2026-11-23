@@ -41,6 +41,7 @@ class SchemaNotReady(RuntimeError):
 
 
 def is_gloss_table(name: str) -> bool:
+    """Whether a table is one of Gloss's (``gloss_`` prefix), e.g. to keep it out of a host's autogenerate."""
     return name.startswith(TABLE_PREFIX)
 
 
@@ -68,6 +69,7 @@ def current_version(bind: Engine | Connection) -> int | None:
 
 
 def has_fts(conn: Connection) -> bool:
+    """Whether the SQLite FTS5 search tables exist here (Postgres full-text search uses indexes instead)."""
     return sa.inspect(conn).has_table("gloss_search_fts")
 
 

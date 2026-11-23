@@ -44,6 +44,8 @@ ACTIONS = ("review", "accept", "reject", "retract", "reopen", "restore")
 
 
 class AssertionOut(BaseModel):
+    """One fact about a subject with its review status; ``redacted`` means the value is withheld from you."""
+
     id: str
     subject: str
     attribute: str
@@ -62,6 +64,8 @@ class AssertionOut(BaseModel):
 
 
 class AssertionPage(BaseModel):
+    """A page of assertions; ``total`` counts every match, for paging with ``limit`` and ``offset``."""
+
     items: list[AssertionOut]
     total: int
     limit: int
@@ -69,6 +73,8 @@ class AssertionPage(BaseModel):
 
 
 class EventOut(BaseModel):
+    """One entry of the append-only event log; ``seq`` is its position in commit order."""
+
     seq: int | None = None
     id: str
     ts: str
@@ -81,6 +87,8 @@ class EventOut(BaseModel):
 
 
 class ProposeIn(BaseModel):
+    """One fact to propose; ``accept`` asks to accept it at once, which the policy may refuse."""
+
     subject: str
     attribute: str
     value: Any
@@ -93,6 +101,8 @@ class ProposeIn(BaseModel):
 
 
 class ProposalIn(BaseModel):
+    """One fact in a ``POST /proposals`` batch."""
+
     subject: str
     attribute: str
     value: Any
@@ -103,6 +113,8 @@ class ProposalIn(BaseModel):
 
 
 class ProposeManyIn(BaseModel):
+    """A batch of facts to propose, with one ``source``, ``accept`` flag and ``comment`` for all."""
+
     proposals: list[ProposalIn]
     source: str | None = None
     accept: bool = False
@@ -110,12 +122,16 @@ class ProposeManyIn(BaseModel):
 
 
 class ProposeOut(BaseModel):
+    """What became of a proposal: created, corroborated, unchanged or previously_rejected."""
+
     outcome: str
     accepted: bool = False
     assertion: AssertionOut
 
 
 class ActionIn(BaseModel):
+    """An optional comment recorded with a review action."""
+
     comment: str | None = None
 
 
@@ -136,16 +152,22 @@ class BulkIn(BaseModel):
 
 
 class BulkError(BaseModel):
+    """An assertion a bulk action could not change, and why."""
+
     id: str
     error: str
 
 
 class BulkOut(BaseModel):
+    """The assertions a bulk action changed, and the ones it could not."""
+
     changed: list[AssertionOut]
     errors: list[BulkError]
 
 
 class SubjectOut(BaseModel):
+    """One subject: its accepted value per attribute, its version and the assertions about it you may read."""
+
     subject: str
     version: int | None = None
     current: dict[str, Any]
@@ -162,6 +184,8 @@ class RekeyIn(BaseModel):
 
 
 class RekeyOut(BaseModel):
+    """What a rename changed: subjects re-keyed (old to new), facts moved, rewritten and sent back."""
+
     subjects: dict[str, str]
     moved: int
     rewritten: int
@@ -170,6 +194,8 @@ class RekeyOut(BaseModel):
 
 
 class SearchHit(BaseModel):
+    """One search result; ``matched`` lists the words it covers when no hit has them all."""
+
     subject: str
     kind: str
     name: str
@@ -184,11 +210,15 @@ class SearchHit(BaseModel):
 
 
 class CheckOut(BaseModel):
+    """A data quality check in effect on a field; ``origin`` is the semantic type it was inherited from."""
+
     check: dict[str, Any]
     origin: str | None = None
 
 
 class ColumnOut(BaseModel):
+    """A column with its agreed meaning: datatype, description, semantic type, confidentiality and checks."""
+
     name: str
     datatype: str | None = None
     physical_type: str | None = None
@@ -204,6 +234,8 @@ class ColumnOut(BaseModel):
 
 
 class MetricOut(BaseModel):
+    """A metric: its expression and, when structured, its aggregate, filter, time column and dimensions."""
+
     name: str
     table: str | None = None
     namespace: str | None = None
@@ -219,6 +251,8 @@ class MetricOut(BaseModel):
 
 
 class TableOut(BaseModel):
+    """A table with its primary key, columns and the metrics defined on it."""
+
     key: str
     source: str | None = None
     description: str | None = None
@@ -230,6 +264,8 @@ class TableOut(BaseModel):
 
 
 class RelationshipOut(BaseModel):
+    """A join: ``from_columns`` of ``from_table`` reference ``to_columns`` of ``to_table``."""
+
     name: str
     namespace: str | None = None
     from_table: str
@@ -241,6 +277,8 @@ class RelationshipOut(BaseModel):
 
 
 class TypeOut(BaseModel):
+    """A semantic type with its checks and name patterns; ``used_by`` counts the fields that use it."""
+
     name: str
     namespace: str | None = None
     datatype: str | None = None
@@ -255,6 +293,8 @@ class TypeOut(BaseModel):
 
 
 class CheckResultIO(BaseModel):
+    """One check result for a field: how many rows failed, and the run that produced it."""
+
     subject: str
     check: dict[str, Any]
     passed: bool
@@ -268,16 +308,22 @@ class CheckResultIO(BaseModel):
 
 
 class CheckRunIn(BaseModel):
+    """A run of check results to record."""
+
     results: list[CheckResultIO]
     run_id: str | None = Field(default=None, description="The host's id for the run that produced these results")
 
 
 class CheckRunOut(BaseModel):
+    """The run id the results were recorded under, and how many were recorded."""
+
     run_id: str
     recorded: int
 
 
 class SyncOut(BaseModel):
+    """What a catalog sync found and did to tables and facts; every event it wrote carries ``correlation``."""
+
     catalog: str
     new: list[str]
     changed: list[str]
@@ -292,11 +338,14 @@ class SyncOut(BaseModel):
 
 
 class HealthOut(BaseModel):
+    """The server is up; ``schema_version`` is the ledger schema version this Gloss release uses."""
+
     ok: bool
     schema_version: int | None = None
 
 
 def header_actor(x_gloss_actor: str | None = Header(default=None)) -> str:
+    """The actor named in the ``X-Gloss-Actor`` header (401 without it); trust it only behind a proxy."""
     if not x_gloss_actor:
         raise HTTPException(401, "Set the X-Gloss-Actor header, e.g. 'human:alice'")
     return x_gloss_actor
@@ -369,6 +418,7 @@ def create_router(
 
     @r.get("/health", response_model=HealthOut)
     def health() -> Any:
+        """Liveness check."""
         return {"ok": True, "schema_version": __import__("gloss").schema.LATEST}
 
     @r.get("/assertions", response_model=AssertionPage)
@@ -386,6 +436,7 @@ def create_router(
         offset: int = 0,
         g: Gloss = Depends(ledger),
     ) -> Any:
+        """Assertions matching the filters, a page at a time (``limit`` at most 5000)."""
         criteria = dict(
             subject=subject, subject_prefix=subject_prefix, dataset=dataset, namespace=namespace, kind=kind,
             attribute=attribute, statuses=status, source_prefix=source_prefix, group=group,
@@ -396,6 +447,7 @@ def create_router(
 
     @r.post("/assertions", status_code=201, response_model=ProposeOut)
     def propose(body: ProposeIn, g: Gloss = Depends(ledger)) -> Any:
+        """Propose one fact as the caller."""
         def go() -> Any:
             res = g.propose_many(
                 [Proposal(body.subject, body.attribute, body.value, body.confidence, body.evidence, body.comment,
@@ -409,6 +461,7 @@ def create_router(
 
     @r.post("/proposals", status_code=201, response_model=list[ProposeOut])
     def propose_many(body: ProposeManyIn, g: Gloss = Depends(ledger)) -> Any:
+        """Propose many facts at once, de-duplicated against what is already known."""
         def go() -> Any:
             props = [Proposal(p.subject, p.attribute, p.value, p.confidence, p.evidence, p.comment, p.group)
                      for p in body.proposals]
@@ -419,6 +472,7 @@ def create_router(
 
     @r.get("/assertions/{assertion_id}", response_model=AssertionOut)
     def get_assertion(assertion_id: str, g: Gloss = Depends(ledger)) -> Any:
+        """One assertion by id or unambiguous id prefix."""
         return guard(lambda: out(g.get(assertion_id)))
 
     @r.post("/assertions/{assertion_id}/{action}", response_model=AssertionOut)
@@ -428,12 +482,14 @@ def create_router(
         body: ActionIn = Body(default_factory=ActionIn),
         g: Gloss = Depends(ledger),
     ) -> Any:
+        """Apply a review action (review, accept, reject, retract, reopen, restore) to one assertion."""
         if action not in ACTIONS:
             raise HTTPException(404, f"Unknown action {action!r}")
         return guard(lambda: out(getattr(g, action)(assertion_id, comment=body.comment)))
 
     @r.post("/bulk/{action}", response_model=BulkOut)
     def bulk(action: str, body: BulkIn, g: Gloss = Depends(ledger)) -> Any:
+        """Apply a review action to the given ids, or to every matching assertion that can take it."""
         if action not in ACTIONS:
             raise HTTPException(404, f"Unknown action {action!r}")
 
@@ -459,6 +515,7 @@ def create_router(
     @r.post("/groups/{group}/{action}", response_model=list[AssertionOut])
     def decide_group(group: str, action: str, body: ActionIn = Body(default_factory=ActionIn),
                      g: Gloss = Depends(ledger)) -> Any:
+        """Accept or reject every open fact of a proposal group, all or nothing."""
         if action not in ("accept", "reject"):
             raise HTTPException(404, f"Unknown action {action!r}")
         fn = g.accept_group if action == "accept" else g.reject_group
@@ -466,10 +523,12 @@ def create_router(
 
     @r.get("/subjects/{subject:path}/history", response_model=list[EventOut])
     def subject_history(subject: str, g: Gloss = Depends(ledger)) -> Any:
+        """Every event of the facts now at a subject, including those from before it was re-keyed."""
         return guard(lambda: [e.to_dict() for e in g.history(subject)])
 
     @r.get("/subjects/{subject:path}", response_model=SubjectOut)
     def subject_view(subject: str, g: Gloss = Depends(ledger)) -> Any:
+        """A subject's accepted values, version and assertions."""
         return guard(
             lambda: {
                 "subject": subject,
@@ -481,16 +540,19 @@ def create_router(
 
     @r.post("/rekey", response_model=RekeyOut)
     def rekey(body: RekeyIn, g: Gloss = Depends(ledger)) -> Any:
+        """Record that a subject, or a whole path with ``namespace``, was renamed or moved."""
         fn = g.rekey_namespace if body.namespace else g.rekey
         return guard(lambda: fn(body.old, body.new, comment=body.comment).__dict__)
 
     @r.get("/log", response_model=list[EventOut])
     def log(after_seq: int = 0, limit: int = 500, correlation: str | None = None,
             g: Gloss = Depends(ledger)) -> Any:
+        """The event log after ``after_seq``, in commit order (at most 5000 events per call)."""
         return [e.to_dict() for e in g.log(after_seq=after_seq, limit=min(limit, 5000), correlation=correlation)]
 
     @r.get("/progress", response_model=dict[str, dict[str, int]])
     def progress(dataset_prefix: str | None = None, g: Gloss = Depends(ledger)) -> Any:
+        """Review progress per dataset or namespace: ``{path: {status: count}}``."""
         return g.progress(dataset_prefix)
 
     @r.get("/search", response_model=list[SearchHit])
@@ -501,14 +563,17 @@ def create_router(
 
     @r.get("/tables", response_model=list[TableOut])
     def tables(prefix: str | None = None, include_pending: bool = False, g: Gloss = Depends(ledger)) -> Any:
+        """All tables, or those whose key starts with ``prefix``, sorted by key."""
         return [_table(t) for t in g.tables(prefix, include_pending=include_pending)]
 
     @r.get("/tables/{key:path}", response_model=TableOut)
     def table(key: str, include_pending: bool = False, g: Gloss = Depends(ledger)) -> Any:
+        """One table by key."""
         return guard(lambda: _table(g.table(key, include_pending=include_pending)))
 
     @r.get("/relationships", response_model=list[RelationshipOut])
     def relationships(table: str | None = None, include_pending: bool = False, g: Gloss = Depends(ledger)) -> Any:
+        """Complete relationships, optionally only those touching ``table``."""
         return [
             RelationshipOut(
                 name=x.name, namespace=x.namespace, from_table=x.from_table, to_table=x.to_table,
@@ -520,10 +585,12 @@ def create_router(
 
     @r.get("/metrics", response_model=list[MetricOut])
     def metrics(table: str | None = None, include_pending: bool = False, g: Gloss = Depends(ledger)) -> Any:
+        """Ledger-wide, namespace and table metrics; with ``table``, only that table's."""
         return [_metric(m) for m in g.metrics(table, include_pending=include_pending)]
 
     @r.get("/types", response_model=list[TypeOut])
     def types(include_pending: bool = False, g: Gloss = Depends(ledger)) -> Any:
+        """Semantic types, each with the number of fields that use it."""
         return [
             TypeOut(
                 name=t.name, namespace=t.namespace, datatype=t.datatype, physical_type=t.physical_type,
@@ -537,6 +604,7 @@ def create_router(
 
     @r.get("/checks/{dataset:path}/effective", response_model=dict[str, list[CheckOut]])
     def effective_checks(dataset: str, g: Gloss = Depends(ledger)) -> Any:
+        """The checks in effect per field of a dataset, including those inherited from semantic types."""
         from .checks import effective_checks as effective
 
         return guard(lambda: {
@@ -546,11 +614,13 @@ def create_router(
     @r.get("/checks/results", response_model=list[CheckResultIO])
     def check_results(subject: str | None = None, dataset: str | None = None, run_id: str | None = None,
                       limit: int = 200, g: Gloss = Depends(ledger)) -> Any:
+        """Logged check results, newest first, for one field, a dataset or one run."""
         rows = guard(lambda: g.check_history(subject, dataset=dataset, run_id=run_id, limit=min(limit, 5000)))
         return [{**row, "ts": row["ts"].isoformat()} for row in rows]
 
     @r.post("/checks/results", status_code=201, response_model=CheckRunOut)
     def record_checks(body: CheckRunIn, g: Gloss = Depends(ledger)) -> Any:
+        """Record a run of check results, with the caller as runner; only for subjects the caller may read."""
         from .checks import CheckResult
 
         def go() -> Any:
@@ -578,28 +648,33 @@ def create_router(
     @r.get("/export/ossie", response_class=PlainTextResponse)
     def export_ossie(include_pending: bool = False, name: str | None = None, namespace: str | None = None,
                      g: Gloss = Depends(ledger)) -> str:
+        """The model as Ossie YAML."""
         return guard(lambda: g.to_yaml(include_pending=include_pending, name=name, namespace=namespace))
 
     @r.get("/viz/mermaid", response_class=PlainTextResponse)
     def viz_mermaid(include_pending: bool = True, g: Gloss = Depends(ledger)) -> str:
+        """The model as a Mermaid ER diagram."""
         from .viz import mermaid_er
 
         return mermaid_er(g, include_pending=include_pending)
 
     @r.get("/viz/report", response_class=HTMLResponse)
     def viz_report(g: Gloss = Depends(ledger)) -> str:
+        """An HTML page with the ER diagram and review progress per dataset."""
         from .viz import html_report
 
         return html_report(g)
 
     @r.get("/ai/context", response_model=dict[str, Any])
     def ai_context(dataset: list[str] | None = Param(default=None), g: Gloss = Depends(ledger)) -> Any:
+        """The accepted model as compact JSON for an AI prompt, within the AI visibility limit."""
         from . import ai
 
         return ai.model_context(g, datasets=dataset)
 
     @r.get("/ai/search", response_model=list[SearchHit])
     def ai_search(q: str, limit: int = 20, g: Gloss = Depends(ledger)) -> Any:
+        """Search as an AI tool sees it: the AI visibility limit applies."""
         from . import ai
 
         return ai.search(g, q, limit=limit)
@@ -609,6 +684,7 @@ def create_router(
 
 def create_app(gloss: Gloss | Callable[..., Gloss], *, actor: Callable[..., str] = header_actor,
                catalogs: Mapping[str, Any] | None = None) -> FastAPI:
+    """A standalone FastAPI app serving :func:`create_router` at the root."""
     app = FastAPI(title="Gloss", version=__import__("gloss").__version__)
     app.include_router(create_router(gloss, actor=actor, catalogs=catalogs))
     return app

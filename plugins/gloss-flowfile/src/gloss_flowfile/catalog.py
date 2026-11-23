@@ -40,6 +40,7 @@ def _get(obj: Any, name: str, default: Any = None) -> Any:
 
 
 def table_key(table: Any) -> str:
+    """A table's dataset key: its qualified ``catalog.schema.table`` name, falling back to older fields."""
     return _get(table, "qualified_name") or _get(table, "full_table_name") or _get(table, "name")
 
 
@@ -50,6 +51,11 @@ def is_remote(table: Any) -> bool:
 
 
 class FlowfileCatalog:
+    """Flowfile's catalog as a Gloss catalog, embedded (a ``CatalogService``) or remote (``fetch_tables``).
+
+    Tables from a connected hub are left out, and so are virtual tables with ``include_virtual=False``.
+    """
+
     def __init__(
         self,
         *,
@@ -97,6 +103,7 @@ class FlowfileCatalog:
 
     # -- Catalog protocol ---------------------------------------------------
     def tables(self, refresh: bool = False) -> dict[str, Any]:
+        """The local tables by key, cached until ``refresh``."""
         if self._tables is None or refresh:
             out = {}
             for t in self._fetch():
@@ -109,12 +116,15 @@ class FlowfileCatalog:
         return self._tables
 
     def coverage(self) -> Coverage:
+        """Complete only when the listing is the whole local catalog (see ``complete``)."""
         return Coverage(complete=self.complete)
 
     def list_assets(self) -> list[str]:
+        """The keys of a fresh listing."""
         return list(self.tables(refresh=True))
 
     def describe(self, key: str) -> AssetSchema:
+        """The table from the cached listing, refreshed once if the key is unknown."""
         tables = self.tables()
         if key not in tables:
             tables = self.tables(refresh=True)
@@ -139,6 +149,7 @@ class FlowfileCatalog:
         )
 
     def fingerprint(self, key: str) -> str:
+        """``asset_fingerprint`` of the described table."""
         return asset_fingerprint(self.describe(key))
 
     def write_back(self, key: str, facts: dict[str, Any]) -> None:

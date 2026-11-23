@@ -240,6 +240,11 @@ class SQLStore:
     """Store backed by SQLAlchemy, on SQLite or Postgres."""
 
     def __init__(self, url_or_engine: str | Engine, *, create: bool | None = None, echo: bool = False):
+        """Open a store on a URL (which it owns) or on a host's ``Engine`` (which it only uses).
+
+        ``create`` defaults to whether the store owns its engine: True creates or upgrades the schema,
+        False only checks that it is up to date (:func:`gloss.schema.require`).
+        """
         from .. import schema
 
         self.owns_engine = not isinstance(url_or_engine, Engine)
@@ -358,6 +363,7 @@ class SQLStore:
             yield conn
 
     def after_commit(self, fn: Callable[[], None]) -> None:
+        """Run ``fn`` once the current transaction has committed, or right away when none is open."""
         tx = self._tx.get()
         if tx is not None:
             tx.after.append(fn)
@@ -436,6 +442,7 @@ class SQLStore:
         return out
 
     def reset_projection(self, states: Iterable[Assertion]) -> None:
+        """Replace every row of ``gloss_assertions`` with ``states``, in one transaction."""
         with self.transaction() as conn:
             conn.execute(assertions_t.delete())
             rows = [_assertion_to_row(s) for s in states]
@@ -444,11 +451,13 @@ class SQLStore:
 
     # -- reads ----------------------------------------------------------------
     def get(self, assertion_id: str) -> Assertion | None:
+        """The assertion with this id, or None."""
         with self._read() as conn:
             r = conn.execute(sa.select(assertions_t).where(assertions_t.c.id == assertion_id)).first()
         return _row_to_assertion(r) if r else None
 
     def get_many(self, ids: Iterable[str]) -> dict[str, Assertion]:
+        """Assertions by id, looked up in batches of 500; unknown ids are left out."""
         ids = list(ids)
         out: dict[str, Assertion] = {}
         with self._read() as conn:
@@ -458,6 +467,7 @@ class SQLStore:
         return out
 
     def by_id_prefix(self, prefix: str, limit: int = 2) -> list[Assertion]:
+        """Assertions whose id starts with ``prefix``; two tell a unique prefix from an ambiguous one."""
         stmt = sa.select(assertions_t).where(self._starts(assertions_t.c.id, prefix)).limit(limit)
         with self._read() as conn:
             return [_row_to_assertion(r) for r in conn.execute(stmt)]
@@ -540,6 +550,7 @@ class SQLStore:
         return rows
 
     def count(self, query: Query) -> int:
+        """Number of assertions matching ``query`` (its ``limit`` and ``offset`` are ignored)."""
         stmt = sa.select(sa.func.count()).select_from(assertions_t).where(*self._where(query))
         with self._read() as conn:
             return conn.execute(stmt).scalar() or 0
@@ -556,6 +567,7 @@ class SQLStore:
             return {(ns, Status(st)): n for ns, st, n in conn.execute(stmt)}
 
     def distinct_subjects(self, query: Query) -> list[str]:
+        """Subjects with at least one assertion matching ``query``, in no particular order."""
         stmt = sa.select(assertions_t.c.subject).where(*self._where(query)).distinct()
         with self._read() as conn:
             return [r[0] for r in conn.execute(stmt)]
@@ -569,6 +581,10 @@ class SQLStore:
         correlation: str | None = None,
         scope: Scope | None = None,
     ) -> list[Event]:
+        """Events after ``after_seq`` in log order, optionally of some assertions or one correlation only.
+
+        With ``scope``, only events of assertions whose current scope path the reader may see.
+        """
         stmt = sa.select(events_t).where(events_t.c.seq > after_seq).order_by(events_t.c.seq)
         if assertion_ids is not None:
             stmt = stmt.where(events_t.c.assertion_id.in_(list(assertion_ids)))
@@ -617,6 +633,7 @@ class SQLStore:
         return AssetRecord(r.key, r.catalog, r.fingerprint, r.schema, r.uid)
 
     def get_asset(self, catalog: str, key: str) -> AssetRecord | None:
+        """The last recorded shape of a catalog's asset, or None when it was never seen."""
         with self._read() as conn:
             r = conn.execute(
                 sa.select(assets_t).where(assets_t.c.catalog == catalog, assets_t.c.key == key)
@@ -624,9 +641,11 @@ class SQLStore:
         return self._asset(r) if r else None
 
     def put_asset(self, record: AssetRecord) -> None:
+        """Record one asset's current shape (see :meth:`put_assets`)."""
         self.put_assets([record])
 
     def put_assets(self, records: Sequence[AssetRecord]) -> None:
+        """Replace the stored shape of each asset in ``records``, stamped now, in one transaction."""
         if not records:
             return
         now = datetime.now(timezone.utc)
@@ -648,11 +667,13 @@ class SQLStore:
             )
 
     def list_assets(self, catalog: str) -> list[AssetRecord]:
+        """Every recorded asset of one catalog."""
         with self._read() as conn:
             rows = conn.execute(sa.select(assets_t).where(assets_t.c.catalog == catalog))
             return [self._asset(r) for r in rows]
 
     def delete_asset(self, catalog: str, key: str) -> None:
+        """Forget an asset's recorded shape."""
         with self.transaction() as conn:
             conn.execute(assets_t.delete().where(assets_t.c.catalog == catalog, assets_t.c.key == key))
 
@@ -722,16 +743,19 @@ class SQLStore:
                     )
 
     def clear_search(self) -> None:
+        """Delete every row of the search index, including the full-text table on SQLite."""
         with self.transaction() as conn:
             conn.execute(search_t.delete())
             if self.search_engine == "fts5":
                 conn.exec_driver_sql("DELETE FROM gloss_search_fts")
 
     def search_is_empty(self) -> bool:
+        """Whether the search index has no rows (e.g. it was never built)."""
         with self._read() as conn:
             return conn.execute(sa.select(search_t.c.subject).limit(1)).first() is None
 
     def accepted_subjects(self) -> list[str]:
+        """Every subject with at least one accepted fact."""
         return self.distinct_subjects(Query(statuses=[Status.ACCEPTED]))
 
     def search(
@@ -831,16 +855,19 @@ class SQLStore:
             return [r[0] for r in conn.exec_driver_sql(sql)]
 
     def get_meta(self, key: str) -> str | None:
+        """A value from ``gloss_meta`` (schema and index versions), or None."""
         with self._read() as conn:
             return conn.execute(sa.select(meta_t.c.value).where(meta_t.c.key == key)).scalar()
 
     def set_meta(self, key: str, value: str) -> None:
+        """Insert or overwrite a value in ``gloss_meta``."""
         with self.transaction() as conn:
             if not conn.execute(meta_t.update().where(meta_t.c.key == key).values(value=value)).rowcount:
                 conn.execute(meta_t.insert().values(key=key, value=value))
 
     # -- check results --------------------------------------------------------
     def append_check_results(self, rows: Sequence[dict[str, Any]]) -> None:
+        """Insert logged check results (rows shaped like ``gloss_check_results``) in one transaction."""
         if rows:
             with self.transaction() as conn:
                 conn.execute(check_results_t.insert(), list(rows))
@@ -853,6 +880,7 @@ class SQLStore:
         *,
         run_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Logged check results, newest first; a falsy ``limit`` returns all of them."""
         stmt = sa.select(check_results_t).order_by(check_results_t.c.id.desc())
         if subject:
             stmt = stmt.where(check_results_t.c.subject == subject)
@@ -878,6 +906,7 @@ class SQLStore:
             conn.execute(stmt, [{"_old": o, "_new": n} for o, n in renames.items()])
 
     def close(self) -> None:
+        """Dispose of an owned engine, refreshing SQLite's statistics first; a host's is left alone."""
         if not self.owns_engine:
             return  # the host's engine is the host's to dispose
         if self.dialect == "sqlite":

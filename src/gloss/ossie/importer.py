@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 
 def load_document(path_or_doc: str | Path | dict[str, Any]) -> dict[str, Any]:
+    """Read an Ossie YAML file, or pass a parsed document through; a file without ``datasets`` is refused."""
     if isinstance(path_or_doc, dict):
         return path_or_doc
     text = Path(path_or_doc).read_text()
@@ -88,12 +89,19 @@ class OssieSource:
 
     @classmethod
     def from_spec(cls, arg: str, **kwargs: Any) -> OssieSource:
+        """``arg`` is the document's path."""
         return cls(arg, **kwargs)
 
     def dataset_key(self, ds: dict[str, Any]) -> str:
+        """The Gloss key for an Ossie dataset: its ``name``, or its ``source`` with ``key_by="source"``."""
         return ds["source"] if self.key_by == "source" and ds.get("source") else ds["name"]
 
     def proposals(self, gloss: Gloss | None = None) -> Iterator[Proposal]:
+        """Every fact in the document as a proposal, with evidence pointing at its place in the file.
+
+        Values the export marked ``inherited`` (from a semantic type) are skipped, and identical facts
+        corroborate existing ones, so re-importing a Gloss export does not duplicate facts.
+        """
         doc = self.doc
         base_ev = {"file": self.origin, "ossie_version": doc.get("version")}
         keys = {ds["name"]: self.dataset_key(ds) for ds in doc.get("datasets", [])}

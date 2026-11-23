@@ -52,6 +52,8 @@ SEMANTIC_FIELD_ATTRS = {
 
 @dataclass
 class SyncReport:
+    """What one sync did: assets new, changed, moved and gone, and the facts proposed, accepted and staled."""
+
     catalog: str
     new: list[str] = field(default_factory=list)
     changed: list[str] = field(default_factory=list)
@@ -65,6 +67,7 @@ class SyncReport:
     correlation: str | None = None  # every event of this run carries it
 
     def to_dict(self) -> dict[str, Any]:
+        """The report as a plain dict, e.g. for JSON output."""
         return self.__dict__.copy()
 
 
@@ -102,6 +105,12 @@ def _structure(schema: dict[str, Any]) -> str:
 
 
 class CatalogSync:
+    """Syncs one catalog into a ledger, writing as the ``catalog:<name>`` actor.
+
+    Every event the instance writes carries one correlation id. ``auto_accept_structure=False``
+    leaves even structural facts for a person to review.
+    """
+
     def __init__(self, gloss: Gloss, catalog: Catalog, *, auto_accept_structure: bool = True):
         self.g = gloss.correlated()
         self.catalog = catalog
@@ -113,11 +122,18 @@ class CatalogSync:
         return SyncReport(self.catalog.name, correlation=self.g.correlation)
 
     def coverage(self) -> Coverage:
+        """What the catalog's listing speaks for; a catalog without ``coverage()`` counts as complete."""
         fn = getattr(self.catalog, "coverage", None)
         return fn() if callable(fn) else Coverage()
 
     # -------------------------------------------------------------------------
     def run(self, *, detect_removed: bool = True, flush_every: int = 5000) -> SyncReport:
+        """Pull sync: describe every listed asset whose fingerprint changed and compare it with the last run.
+
+        Proposals are committed in batches of about ``flush_every``. A known asset missing from the
+        listing is a rename when its ``uid`` and columns match a new one, otherwise gone, and only
+        inside ``coverage()``; ``detect_removed=False`` skips both.
+        """
         rep = self._report()
         self._refs = None
         store = self.g.store

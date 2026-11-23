@@ -22,6 +22,8 @@ from typing import ClassVar, Protocol, runtime_checkable
 
 
 class Actor(str):
+    """Base of the typed actors: the string is ``"<kind>:<name>"`` and ``name`` is the id after the colon."""
+
     kind: ClassVar[str] = ""
     name: str
 

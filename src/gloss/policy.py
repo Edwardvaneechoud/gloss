@@ -30,6 +30,7 @@ from .model import Assertion, Confidentiality, is_structural
 
 
 class PermissionDenied(PermissionError):
+    """The policy does not let this actor take this action, or propose this fact."""
     pass
 
 
@@ -70,6 +71,7 @@ class Context:
 
     @property
     def via_ai(self) -> bool:
+        """Whether the actor came through an AI agent; the default policy then treats them as AI."""
         return bool(self.via) and actor_kind(self.via) == "ai"
 
 
@@ -88,29 +90,36 @@ class Scope:
 
     @classmethod
     def everything(cls) -> Scope:
+        """Every path at every level: what the unbound ledger reads."""
         return cls()
 
     @classmethod
     def nothing(cls) -> Scope:
+        """No paths and the lowest ceiling: what an actor the policy does not recognise reads."""
         return cls(prefixes=(), include_global=False, max_confidentiality=Confidentiality.PUBLIC)
 
     @property
     def all_paths(self) -> bool:
+        """Whether every path, ledger-wide subjects included, is readable (details may still be withheld)."""
         return self.prefixes is None and self.include_global
 
     @property
     def unrestricted(self) -> bool:
+        """Whether nothing is limited at all: every path and every confidentiality level."""
         return self.all_paths and self.max_confidentiality is Confidentiality.RESTRICTED
 
     def covers(self, path: str | None) -> bool:
+        """Whether a subject at ``path`` is readable; ``None`` stands for a ledger-wide subject."""
         if path is None:
             return self.include_global
         return self.prefixes is None or any(path_covers(p, path) for p in self.prefixes)
 
     def covers_subject(self, subject: str | SubjectId) -> bool:
+        """Whether ``subject`` lies inside this scope."""
         return self.covers(SubjectId.parse(subject).scope_path)
 
     def intersect(self, other: Scope) -> Scope:
+        """What both scopes allow: the narrower of each overlapping pair of prefixes, the lower ceiling."""
         if self.prefixes is None:
             prefixes = other.prefixes
         elif other.prefixes is None:
@@ -141,6 +150,7 @@ class Decision:
 
     @classmethod
     def of(cls, value: Decision | str | None) -> Decision:
+        """Normalise what ``on_propose`` returned: a ``Decision``, an outcome string, or None for queue."""
         if isinstance(value, Decision):
             return value
         if value is None:
@@ -154,15 +164,18 @@ QUEUE = Decision("queue")
 
 
 def accept_now(rule: str) -> Decision:
+    """Accept a proposal at once; ``rule`` is recorded on the accepted event."""
     return Decision("accept", rule)
 
 
 def refuse(reason: str) -> Decision:
+    """Refuse a proposal; ``reason`` goes into the ``PermissionDenied`` the proposer gets."""
     return Decision("refuse", reason)
 
 
 @runtime_checkable
 class Policy(Protocol):
+    """Who may do what and read what. Hosts implement it, or subclass :class:`DefaultPolicy`."""
     def can(
         self, actor: str, action: str, assertion: Assertion | None = None, context: Context | None = None
     ) -> bool:
@@ -214,6 +227,7 @@ class DefaultPolicy:
                 raise ValueError(f"Unknown review mode {m!r} (use one of {sorted(MODES)})")
 
     def mode_for(self, path: str | None) -> str:
+        """The review mode at ``path``: the longest matching prefix in ``modes``, else ``mode``."""
         best, mode = -1, self.mode
         for prefix, m in self.modes.items():
             if path_covers(prefix, path) and len(prefix) > best:
@@ -228,11 +242,13 @@ class DefaultPolicy:
         return True
 
     def may_review(self, actor: str, assertion: Assertion | None, context: Context | None) -> bool:
+        """Whether this person may mark this fact reviewed; by default, whoever may decide it."""
         return self.may_decide(actor, assertion, context)
 
     def can(
         self, actor: str, action: str, assertion: Assertion | None = None, context: Context | None = None
     ) -> bool:
+        """The rules in the class docstring for one action on one fact; pure, as it runs once per fact."""
         kind = actor_kind(actor)
         if kind is None or kind not in self.kinds:
             return False
@@ -263,6 +279,10 @@ class DefaultPolicy:
     def on_propose(
         self, actor: str, source: str, subject: SubjectId, attribute: str, context: Context | None = None
     ) -> Decision:
+        """Refuse ``refuse_attributes``; accept a catalog's structural facts and a solo person's own edits.
+
+        Everything else is queued. A person's edit made via an AI agent is queued too.
+        """
         kind = actor_kind(actor)
         if attribute in self.refuse_attributes:
             return refuse(f"this ledger does not hold {attribute!r}")
@@ -282,6 +302,10 @@ class DefaultPolicy:
         return None
 
     def scope(self, actor: str, context: Context | None = None) -> Scope:
+        """The paths from :meth:`readable_prefixes`, details up to ``human_max`` (people) or ``ai_max`` (AI).
+
+        A person acting via an agent counts as AI. Unknown actors read nothing.
+        """
         kind = actor_kind(actor)
         if kind is None or kind not in self.kinds:
             return Scope.nothing()
@@ -325,6 +349,10 @@ class RolePolicy(DefaultPolicy):
         return any(path_covers(prefix, path) and actor in set(who) for prefix, who in self.stewards.items())
 
     def may_decide(self, actor: str, assertion: Assertion | None, context: Context | None) -> bool:
+        """Admins everywhere, stewards under their prefixes; with no fact at hand, admins only.
+
+        A move also needs a say over its target (``context.attrs["to"]``).
+        """
         if assertion is None:
             return actor in self.admins
         if not self._decides_path(actor, assertion.scope_path):
@@ -335,9 +363,11 @@ class RolePolicy(DefaultPolicy):
         return True
 
     def may_review(self, actor: str, assertion: Assertion | None, context: Context | None) -> bool:
+        """Reviewers anywhere, and whoever may decide the fact."""
         return actor in self.reviewers or self.may_decide(actor, assertion, context)
 
     def readable_prefixes(self, actor: str, context: Context | None) -> tuple[str, ...] | None:
+        """The prefixes the actor reads or stewards; all for admins, machines, or unset ``readers``."""
         if self.readers is None or actor in self.admins or actor_kind(actor) in self.machine_kinds:
             return None
         found = [p for p, who in self.readers.items() if actor in set(who)]

@@ -62,6 +62,7 @@ def mermaid_er(gloss: Gloss, *, include_pending: bool = True, dataset_prefix: st
 
 
 def progress_table(gloss: Gloss, dataset_prefix: str | None = None) -> str:
+    """Review progress per dataset as a text table, with a bar for the accepted share of live facts."""
     prog = gloss.progress(dataset_prefix)
     cols = ["accepted", "reviewed", "proposed", "stale", "rejected"]
     width = max([len(k) for k in prog] + [7])
