@@ -1,0 +1,56 @@
+name: Release glosslayer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-glosslayer
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]" -e plugins/glosslayer-flowfile duckdb
+      - run: ruff check src plugins tests scripts examples --select E,F,W,B --ignore E501,B008
+      - run: pytest -q
+      - run: pip install build twine
+      - run: python -m build --outdir dist .
+      - run: twine check --strict dist/*
+      - name: Smoke-test the wheel in a clean environment
+        run: |
+          python -m venv "$RUNNER_TEMP/smoke"
+          "$RUNNER_TEMP/smoke/bin/pip" install dist/*.whl
+          cd "$RUNNER_TEMP"
+          smoke/bin/gloss --help
+          smoke/bin/python -c 'from glosslayer.ossie.exporter import _schema; assert _schema()["$defs"]'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/glosslayer/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

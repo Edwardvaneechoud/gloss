@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling>=1.24"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "glosslayer"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "A catalog-agnostic semantic layer: track, review, visualize and serve Apache Ossie semantic models."
 readme = "README.md"
 license = "Apache-2.0"
@@ -14,12 +14,13 @@ keywords = ["semantic-layer", "ossie", "data-catalog", "metadata", "llm", "mcp"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: Apache Software License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
   "Topic :: Database",
 ]
 dependencies = [
@@ -38,7 +39,7 @@ validate = ["jsonschema>=4.18"]
 checks = ["polars>=1.0"]
 postgres = ["psycopg[binary]>=3.1"]
 server = ["fastapi>=0.110", "uvicorn>=0.29"]
-mcp = ["mcp>=1.2"]
+mcp = ["mcp>=1.22"]
 all = ["glosslayer[validate,checks,postgres,server,mcp]"]
 dev = ["glosslayer[validate,checks,server,mcp]", "pytest>=8", "httpx>=0.27", "ruff>=0.6"]
 
@@ -61,7 +62,7 @@ git = "glosslayer.sinks:GitSink"
 packages = ["src/glosslayer"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "examples", "docs", "scripts", "README.md", "CHANGELOG.md", "LICENSE", "NOTICE"]
+include = ["/src", "/tests", "/examples", "/docs", "/scripts", "/README.md", "/CHANGELOG.md", "/LICENSE", "/NOTICE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "plugins/glosslayer-flowfile/tests"]

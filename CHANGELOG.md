@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-11-24)
 
 First public version. The event format, subject grammar and schema are at version 1; ledgers created by
 earlier development snapshots are not supported.
