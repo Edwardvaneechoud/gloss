@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check the tagged commit is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]" -e plugins/glosslayer-flowfile duckdb
+      - name: Check the tag matches every version string
+        run: |
+          python - <<'EOF'
+          import os
+          import sys
+          import tomllib
+
+          import glosslayer
+
+          tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+          found = {"glosslayer.__version__": glosslayer.__version__}
+          for path in ("pyproject.toml", "plugins/glosslayer-flowfile/pyproject.toml"):
+              with open(path, "rb") as f:
+                  found[path] = tomllib.load(f)["project"]["version"]
+          wrong = {where: version for where, version in found.items() if version != tag}
+          if wrong:
+              sys.exit(f"tag {os.environ['GITHUB_REF_NAME']} does not match: {wrong}")
+          EOF
+      - run: ruff check src plugins tests scripts examples --select E,F,W,B --ignore E501,B008
+      - run: pytest -q
+      - run: pip install build twine
+      - run: python -m build --outdir dist-core .
+      - run: python -m build --outdir dist-flowfile plugins/glosslayer-flowfile
+      - run: twine check --strict dist-core/* dist-flowfile/*
+      - name: Smoke-test both wheels in a clean environment
+        run: |
+          python -m venv "$RUNNER_TEMP/smoke"
+          "$RUNNER_TEMP/smoke/bin/pip" install dist-core/*.whl dist-flowfile/*.whl
+          cd "$RUNNER_TEMP"
+          smoke/bin/gloss --help
+          smoke/bin/python -c 'from glosslayer.ossie.exporter import _schema; assert _schema()["$defs"]'
+          smoke/bin/python -c 'import glosslayer_flowfile'
+          smoke/bin/gloss plugins | grep flowfile-lineage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-core
+          path: dist-core/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-flowfile
+          path: dist-flowfile/
+          if-no-files-found: error
+
+  publish-core:
+    name: publish glosslayer
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/glosslayer/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-core
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # The plugin depends on the core, so it is only published once the core is on PyPI.
+  publish-flowfile:
+    name: publish glosslayer-flowfile
+    needs: publish-core
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-flowfile
+      url: https://pypi.org/project/glosslayer-flowfile/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-flowfile
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

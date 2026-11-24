@@ -83,11 +83,12 @@ class Agent:
 
     def __call__(self, tool: str, **args):
         result = asyncio.run(self.server.call_tool(tool, args))
-        if isinstance(result, tuple):  # MCP SDK 1.x
-            result = result[1] if result[1] is not None else result[0]
-        data = getattr(result, "structured_content", None)
-        if data is None:
-            data = [json.loads(c.text) for c in getattr(result, "content", result)]
+        content, data = getattr(result, "content", result), getattr(result, "structured_content", None)
+        if isinstance(result, tuple):  # MCP SDK 1.10+: (content, structured)
+            content, data = result
+        if data is None:  # older 1.x: one JSON text block per returned item
+            blocks = [json.loads(c.text) for c in content]
+            data = blocks[0] if len(blocks) == 1 else blocks
         data = data.get("result", data) if isinstance(data, dict) and set(data) == {"result"} else data
         print(f"  >>> {tool}({', '.join(f'{k}={v!r}' for k, v in args.items())})")
         print("      " + json.dumps(data, ensure_ascii=False)[:300])

@@ -1,0 +1,12 @@
+Gloss
+Copyright 2026 Gloss contributors
+
+This product includes the Apache Ossie core JSON Schema
+(src/glosslayer/ossie/ossie-schema.json) and an example semantic model
+(tests/ossie_renamed_fields.yaml), developed at The Apache Software
+Foundation (https://www.apache.org/) and licensed under the Apache
+License, Version 2.0.
+
+Gloss is an independent project and is not affiliated with or endorsed
+by The Apache Software Foundation. "Apache" and "Apache Ossie" are
+trademarks of The Apache Software Foundation.
