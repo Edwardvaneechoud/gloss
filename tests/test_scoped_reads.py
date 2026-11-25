@@ -60,6 +60,15 @@ def test_a_view_only_reads_its_scope(ledger):
         carol.propose("dataset:hr.employees", "description", "mine now")
 
 
+def test_a_model_view_is_scoped_and_redacted(ledger):
+    everything = ledger.model_view()
+    assert {t.key for t in everything.tables} == {"sales.orders", "hr.employees"} and len(everything.joins) == 1
+    view = ledger.as_actor(Human("carol")).model_view()
+    assert [t.key for t in view.tables] == ["sales.orders"]
+    assert view.joins == []  # a join into a table she cannot read is not shown
+    assert ledger.as_actor(Human("carol")).model_view("hr").tables == []
+
+
 def test_stewards_and_admins_read_their_own(ledger):
     assert [t.key for t in ledger.as_actor(Human("bob")).tables()] == ["hr.employees"]
     assert len(ledger.as_actor(Human("root")).tables()) == 2

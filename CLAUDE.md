@@ -36,6 +36,9 @@ No Postgres at hand: `pip install pgserver` gives a throwaway one (`pgserver.get
 | Schema creation and version ladder for hosts with migrations | `schema.py` |
 | Object API: `Table`, `Column`, `Relationship`, `Metric`, `SemanticType` | `modeling.py` |
 | Actors, precise dtypes, checks, type suggester | `actors.py`, `dtypes.py`, `checks.py`, `semantic.py` |
+| Metric queries (compile, dry-run, what depends on a join), join measurement, rule suggestions | `query.py`, `joins.py`, `rules.py` |
+| SQL text helpers and the contract of `execute` | `dialect.py` |
+| The model with its review state beside it, the review queue | `modelview.py` |
 | Confidentiality levels; which facts mention a column or table | `visibility.py`, `references.py` |
 | Search index contents and incremental updates | `search_index.py` |
 | Catalog sync, drift, renames, write-back | `sync.py`, `catalogs/file.py` |
@@ -89,6 +92,13 @@ Design rationale: `docs/architecture.md`.
     `uq_gloss_assertions_accepted` enforces it; `store.append` writes states leaving `accepted` before
     states entering it. A violation surfaces as `ConcurrentWrite` and the ledger retries once.
 
+13. **Gloss writes SQL and never runs it.** Anything that needs data takes the host's `execute` (`dialect.Execute`)
+    and tells `QueryFailed` from `EngineUnavailable`; an unavailable engine never refuses anything. Names in
+    compiled SQL are always quoted with `dialect.quote` (not `references.quote_ident`), values go through
+    `dialect.literal`, and free SQL comes only from a stored metric. Rules read types and statistics, never names.
+14. **Taking facts away goes through `Gloss.withdraw`** (and `withdraw_subject`, `clear`, `retract_left_out` on top
+    of it): retract or reject by who stated the fact, all or nothing.
+
 ## Adding things
 
 - **A new attribute:** `model.register_attribute(...)` in `_register_builtins` (hosts call the same
@@ -139,9 +149,13 @@ Design rationale: `docs/architecture.md`.
 - **Export names:** dataset keys like `crm.orders` export as `orders`, but as `crm_orders` when two
   tables share a short name (same for namespaced relationships and metrics). Metric expressions written
   against `orders.…` then break. A per-dataset Ossie name override is not built yet.
-- **Structured metrics are stored, not compiled.** `aggregate`, `filter`, `time_column`, `dimensions`,
-  `format` and a column's `role` are facts; turning them into a query is the host's job, and Ossie has no
-  native place for them yet (they travel in the extension).
+- **Structured metric attributes have no native place in Ossie yet.** `aggregate`, `filter`, `time_column`,
+  `dimensions`, `format` and a column's `role` travel in the extension. `query.compile_query` compiles a metric that
+  belongs to a table; a namespace's metric has no rows to compute over and is refused.
+- `glosslayer.query` and `glosslayer.rules` have no REST routes, MCP tools or CLI commands yet: they need a host's
+  `execute`, which a served ledger does not have.
+- An edit of a definition that leaves a part out only takes effect at once where the edit is accepted at once
+  (`retract_left_out`). A queued edit keeps the accepted part, also after it is accepted later.
 - Column renames are only known when reported (`Gloss.rekey` on a field). A pull sync sees a renamed
   column as drop + add; table renames are detected by catalog id plus unchanged columns.
 - Drift detection of metric references is a word-match heuristic on SQL text (`references.py`): it can

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0 (2026-11-25)
+
+Only additions: the event format, subject grammar and database schema are unchanged.
+
+### Queries and data
+- `glosslayer.query`: compile a metric by dimensions, filters and time grain into one SQL statement, following joins
+  many to one; `check_metric` (compile and dry-run a proposal) and `dependents` (what stops compiling without a join).
+- `glosslayer.joins`: measure a join's two sides (`ok`, `reversed`, `many_to_many`, `unchecked`), one or a whole
+  model's, and `validate` one without asking the data.
+- `glosslayer.rules`: suggest column roles, joins and metrics from types and one aggregate per table, and store them
+  as proposals with their evidence, optionally in an AI's words.
+- `glosslayer.dialect`: SQL quoting, literals and date truncation, and the contract of a host's `execute`.
+
+### Reading and reviewing
+- `Gloss.model_view`: a namespace's model with its review state beside it; `Gloss.facts`, `Gloss.review_queue`,
+  `Gloss.metric_names`.
+- `visibility.above`: datasets and columns above a level by the strongest live claim.
+- `Gloss.withdraw`, `withdraw_subject`, `can_withdraw`, `clear` and `retract_left_out`.
+
 ## 0.1.0 (2026-11-24)
 
 First public version. The event format, subject grammar and schema are at version 1; ledgers created by

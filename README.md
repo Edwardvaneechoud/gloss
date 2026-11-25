@@ -345,7 +345,8 @@ before and no longer declare (a column you deleted from the `Table`).
 `Relationship(..., namespace="sales")`, `Metric(..., namespace="sales")` and
 `SemanticType(..., namespace="crm")` put a definition in a namespace. A metric can also carry its
 structured parts next to the SQL (`aggregate`, `filter`, `time_column`, `dimensions`, `format`), and a
-column its `role` (`key`, `time`, `category`, `amount`), for hosts that build metric queries.
+column its `role` (`key`, `time`, `category`, `amount`); [metric queries](#metric-queries-joins-and-suggestions)
+are compiled from them.
 
 ### Review
 
@@ -373,6 +374,12 @@ print(len(done))                               # 39
 value automatically supersedes the previously accepted one, and `g.restore(old_id, ...)` puts a superseded
 value back. Accepting one fact of a relationship's or metric's proposal group accepts the group
 (`g.accept_group(group, ...)` says so explicitly); if one part cannot be accepted, none is.
+
+To take something away without deciding fact by fact, `g.withdraw(facts, ...)` retracts what is held (an
+accepted fact, your own proposal) and rejects what someone else proposed, all or nothing.
+`g.withdraw_subject("metric:crm.orders/revenue", ...)` removes a whole definition,
+`g.clear([(subject, "description")], ...)` empties single attributes, and `g.can_withdraw(subjects, ...)` asks the
+policy first. The history keeps everything.
 
 Who may do what is the policy's decision: see [Policies and review modes](#policies-and-review-modes).
 
@@ -557,6 +564,114 @@ are what's redacted.
 
 On SQLite search uses FTS5; on Postgres `tsvector` with GIN indexes. Both stem words and feed the
 spelling suggestions. Any other database falls back to plain matching.
+
+## Metric queries, joins and suggestions
+
+Gloss compiles, measures and suggests; it never connects to your data. A query is compiled to one SQL statement
+you run; anything that needs an answer from the data takes an `execute` function that runs a statement and
+returns its rows.
+
+### Ask for a metric
+
+```python
+from glosslayer.query import Filter, MetricQuery, QueryModel, compile_query
+
+model = QueryModel.read(g)                     # the accepted metrics, joins and columns
+q = compile_query(model, MetricQuery("revenue", ["customers.country"], [Filter("status", "=", "open")]))
+print(q.sql)
+# SELECT "orders"."__gloss_d1" AS "customers.country", SUM(orders.amount) AS "revenue"
+# FROM (SELECT "orders".*, "j1"."country" AS "__gloss_d1" FROM "crm.orders" AS "orders" LEFT JOIN "crm.customers" AS "j1" ON "orders"."customer_id" = "j1"."customer_id" WHERE "orders"."status" = 'open') AS "orders"
+# GROUP BY "orders"."__gloss_d1"
+# ORDER BY "customers.country" ASC
+# LIMIT 1000
+print(q.tables, q.metric.version is not None)  # ['crm.orders', 'crm.customers'] True
+```
+
+- Joins are followed only from their many side to their one side, so a joined table never multiplies the base
+  table's rows. A metric's own expression and filter may name a joined table's column (`customers.country`).
+- Free SQL comes only from the accepted metric. Names in a query are checked against the model and quoted, values
+  are written as literals, and what cannot compile is a `ValueError` that says what to write instead.
+- `grain="month"` groups by the metric's `time_column`; a metric with `dimensions` may only be broken down by those.
+- `table_names={key: name}` writes a table under another name, `dialect=` is `ansi` (default), `postgres`, `duckdb`,
+  `snowflake` or `bigquery`.
+- `check_metric(model, metric, execute)` refuses a proposed metric that does not compile or run, and
+  `dependents(model, join)` lists the metrics that would stop compiling without a join.
+
+### Measure a join
+
+A join whose *to* side repeats its key silently multiplies every number over it, so measure it before you trust it:
+
+```python
+import sqlite3
+from glosslayer import joins
+
+warehouse = sqlite3.connect(":memory:")
+warehouse.executescript('''
+    CREATE TABLE "crm.customers" (customer_id, country);
+    INSERT INTO "crm.customers" VALUES (1, 'NL'), (2, 'BE');
+    CREATE TABLE "crm.orders" (order_id, customer_id, amount);
+    INSERT INTO "crm.orders" VALUES (1, 1, 10.0), (2, 1, 5.5), (3, 2, 10.0);
+''')
+
+def execute(sql):                              # raise QueryFailed / EngineUnavailable (glosslayer.dialect) on errors
+    return warehouse.execute(sql).fetchall()
+
+found = joins.check("crm.orders", ["customer_id"], "crm.customers", ["customer_id"], execute)
+print(found.verdict, "-", found.message)
+# ok - customer_id is unique in customers (2 of 2 rows) and repeats in orders (2 distinct in 3 rows).
+print(joins.check("crm.customers", ["customer_id"], "crm.orders", ["customer_id"], execute).verdict)     # reversed
+```
+
+### Let rules suggest
+
+Rules read column types and one aggregate per table, never what a name seems to mean, and propose roles, joins and
+metrics with their evidence:
+
+```python
+from glosslayer import rules
+from glosslayer.model import LIVE_STATUSES
+from glosslayer.seams import AssetSchema
+from glosslayer.seams import Column as CatalogColumn
+
+tables = [                                     # what your catalog lists: a Catalog plugin's describe() gives these
+    AssetSchema("crm.customers", [CatalogColumn("customer_id", "Int64"), CatalogColumn("country", "String")]),
+    AssetSchema("crm.orders", [CatalogColumn("order_id", "Int64"), CatalogColumn("customer_id", "Int64"),
+                               CatalogColumn("amount", "Float64")]),
+]
+stats, problem = rules.collect_stats(tables, execute)
+suggestions = rules.suggest(stats)
+print([(m.table, m.name) for m in suggestions.metrics][1:3])
+# [('crm.orders', 'order_count'), ('crm.orders', 'total_amount')]
+
+draft = glosslayer.open("sqlite://")
+view = draft.model_view("crm", tables=tables, statuses=LIVE_STATUSES)
+print(rules.propose(draft.as_actor(Human("edward")), view, suggestions).added)
+# Counts(roles=5, descriptions=0, joins=1, metrics=5)
+```
+
+They are stated by `inferred:rules`, so they queue for review; a second run skips what the model holds. An AI's
+better names and descriptions go in as `words=`, stated by the agent that wrote them.
+
+### What waits, beside what is agreed
+
+`g.table(...)` and friends answer "what is the model". A screen that edits and reviews one also needs what is
+waiting next to it, who stated it and why:
+
+```python
+view = draft.model_view("crm", tables=tables, statuses=LIVE_STATUSES)
+amount = view.table("orders").column("amount")
+print(amount.value("role"), amount.pending[0].source, "-", amount.pending[0].rationale)
+# amount inferred:rules - Rule: amount is numeric (Float64) and repeats (2 distinct in 3 rows).
+print(len(draft.review_queue("crm", tables=tables)))      # 11
+
+total = next(m for m in view.metrics if m.name == "total_amount")
+draft.accept_group(total.group, actor=Human("alice"))
+print(len(draft.review_queue("crm", tables=tables)))      # 10
+draft.close()
+```
+
+A join or a metric is one entry with its whole proposal group. With accepted facts only (the default) the view is
+the published model, and `compile_query` takes it as it is.
 
 ## AI agents
 
@@ -1003,6 +1118,11 @@ src/glosslayer/
   dtypes.py         Int(32), Decimal(18, 2), String(255), DateTime(tz=…)
   checks.py         data quality checks, single-pass Polars plan, SQL generation
   semantic.py       TypeSuggester
+  query.py          compiling metric queries to SQL, checking metrics, what depends on a join
+  joins.py          measuring joins against the data
+  rules.py          rule-based suggestions: roles, joins, metrics
+  modelview.py      a namespace's model with its review state beside it, the review queue
+  dialect.py        quoting, literals and the contract of `execute`
   visibility.py     confidentiality levels of subjects
   references.py     which facts mention a column or table
   search_index.py   search index rows, incremental updates, rebuild
@@ -1036,7 +1156,6 @@ and [CLAUDE.md](CLAUDE.md) for conventions.
 - Review UI as an embeddable component
 - An AI suggester source: describe undocumented fields in batches, as proposals
 - Table-level and cross-column checks; retention for check results
-- Compiling structured metrics into queries (the host's engine does this today)
 - A per-dataset Ossie name override for exports
 - Semantic (embedding) search; an optional Rust search core for very large ledgers
 

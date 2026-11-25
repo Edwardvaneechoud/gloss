@@ -673,6 +673,93 @@ class Gloss:
                 raise errors[0][1]
         return done
 
+    # ------------------------------------------------------------- withdrawing
+    @staticmethod
+    def _withdrawal(actor: str, a: Assertion) -> str:
+        """How ``actor`` takes a live fact away: reject an open fact someone else stated, retract anything else.
+
+        Retracting withdraws what is held (one's own proposal, or an accepted fact); rejecting is a decision on
+        another's proposal, which also keeps its source from proposing the same value again.
+        """
+        return P.RETRACT if a.status is Status.ACCEPTED or actor in a.sources else P.REJECT
+
+    def withdraw(
+        self, assertions: Iterable[Assertion], *, actor: str | None = None, comment: str | None = None
+    ) -> list[Assertion]:
+        """Take live facts away, each the way that fits it, in one transaction: the first refusal undoes them all.
+
+        An open fact somebody else stated is rejected; an accepted fact, or one's own proposal, is retracted. Nothing
+        is lost: the history keeps every fact, and the same subject can be described again.
+        """
+        actor = self._who(actor)
+        plan: dict[str, list[str]] = {P.REJECT: [], P.RETRACT: []}
+        for a in assertions:
+            plan[self._withdrawal(actor, a)].append(a.id)
+        changed: list[Assertion] = []
+        with self.store.transaction():
+            for action, ids in plan.items():
+                done, errors = self.transition_many(action, ids, actor=actor, comment=comment)
+                if errors:
+                    raise errors[0][1]
+                changed += done
+        return changed
+
+    def _live(self, subjects: Iterable[str | SubjectId], attributes: Sequence[str] | None = None) -> list[Assertion]:
+        """The live facts of these subjects this handle may read in full, in one lookup."""
+        wanted = {str(SubjectId.parse(s)) for s in subjects}
+        if not wanted:
+            return []
+        rows = self.store.find_for_subjects(wanted, list(LIVE_STATUSES), attributes=attributes, scope=self._scope)
+        return [a for a in self._redact(rows) if not a.redacted]
+
+    def withdraw_subject(
+        self, subject: str | SubjectId, *, actor: str | None = None, comment: str | None = None
+    ) -> list[Assertion]:
+        """Take every live fact of one subject away (remove a metric, a join) as :meth:`withdraw` does."""
+        live = self._live([subject])
+        if not live:
+            raise KeyError(f"{str(subject)!r} holds nothing to remove")
+        return self.withdraw(live, actor=actor, comment=comment)
+
+    def can_withdraw(
+        self, subjects: Iterable[str | SubjectId], *, actor: str | None = None
+    ) -> dict[str, bool]:
+        """Per subject with live facts, whether the policy lets the actor withdraw all of them (one lookup)."""
+        actor = self._who(actor)
+        out: dict[str, bool] = {}
+        for a in self._live(subjects):
+            allowed = self.policy.can(actor, self._withdrawal(actor, a), a, self.context)
+            out[a.subject] = out.get(a.subject, True) and allowed
+        return out
+
+    def clear(
+        self, facts: Iterable[tuple[str | SubjectId, str]], *, actor: str | None = None, comment: str | None = None
+    ) -> list[Assertion]:
+        """Withdraw every live value of these ``(subject, attribute)`` pairs: a description emptied, a role unset."""
+        pairs = {(str(SubjectId.parse(s)), attribute) for s, attribute in facts}
+        live = self._live({s for s, _ in pairs}, sorted({attribute for _, attribute in pairs}))
+        return self.withdraw([a for a in live if (a.subject, a.attribute) in pairs], actor=actor, comment=comment)
+
+    def retract_left_out(
+        self, results: Iterable[ProposeResult], attributes: Iterable[str], *, actor: str | None = None,
+        comment: str | None = None,
+    ) -> list[Assertion]:
+        """After a new definition took effect, withdraw the accepted ``attributes`` it no longer states.
+
+        ``results`` are what :meth:`propose_many` made of the definition; ``attributes`` the parts it states in full
+        (leaving one out means removing it). A subject whose new facts are not all accepted keeps its accepted parts:
+        a queued definition changes nothing until it is decided.
+        """
+        stated: dict[str, set[str]] = defaultdict(set)
+        queued: set[str] = set()
+        for r in results:
+            stated[r.assertion.subject].add(r.assertion.attribute)
+            if r.assertion.status is not Status.ACCEPTED:
+                queued.add(r.assertion.subject)
+        live = self._live(stated.keys() - queued, sorted(attributes))
+        gone = [a for a in live if a.status is Status.ACCEPTED and a.attribute not in stated[a.subject]]
+        return self.withdraw(gone, actor=actor, comment=comment)
+
     def comment(self, assertion_id: str, *, actor: str | None = None, comment: str) -> Assertion:
         """Add a comment to a fact's history without changing its status."""
         actor = self._who(actor)
@@ -1330,6 +1417,57 @@ class Gloss:
         if self._limit is not None:
             state.redact(self._limit)
         return state
+
+    def metric_names(self, namespace: str | None = None) -> dict[str, SubjectId]:
+        """The live metrics at or under a path (accepted or waiting), each name with its subject.
+
+        For keeping names unique where people ask for metrics by name; where two share one, the first by subject.
+        """
+        names: dict[str, SubjectId] = {}
+        for a in self.find(namespace=namespace, kind=Kind.METRIC.value, statuses=LIVE_STATUSES):
+            sid = a.subject_id
+            names.setdefault(sid.name or "", sid)
+        return names
+
+    def review_queue(self, namespace: str | None = None, *, tables: Iterable[Any] = ()) -> list[Any]:
+        """What waits for a decision at or under a path, oldest first (:class:`~glosslayer.modelview.ReviewEntry`).
+
+        A fact on its own is one entry; for a join or a metric the whole proposal group is one, since it is decided
+        as a unit. ``tables`` (as the catalog lists them) give entries their table's name and ``uid``.
+        """
+        from .modelview import review_queue
+
+        return review_queue(self, namespace, tables)
+
+    def facts(self, assertions: Iterable[Assertion]) -> list[Any]:
+        """``assertions`` as :class:`~glosslayer.modelview.Fact`, with what their events say about each.
+
+        That is the channel and comment a fact was proposed with and who last accepted it, read in one go.
+        """
+        from .modelview import read_facts
+
+        return read_facts(self, assertions)
+
+    def model_view(
+        self,
+        namespace: str | None = None,
+        *,
+        tables: Iterable[Any] | None = None,
+        related: Iterable[Any] = (),
+        joins_of: str | None = None,
+        statuses: Iterable[Status] = (Status.ACCEPTED,),
+    ) -> Any:
+        """A namespace's model with its review state beside it (:class:`~glosslayer.modelview.ModelView`).
+
+        Without ``namespace`` it is the whole ledger's. ``tables`` are the model's tables as the catalog lists them
+        (``AssetSchema`` or anything shaped like it); without it they are the ones facts under ``namespace`` are
+        about. ``related`` are other tables its joins may reach: they give a query their columns and a join its far
+        end's ``uid``. ``joins_of`` names another namespace whose joins are included where they touch one of
+        ``tables`` (a catalog's joins, shown in a schema). Pass ``statuses=LIVE_STATUSES`` for what is waiting too.
+        """
+        from .modelview import build
+
+        return build(self, namespace, tables=tables, related=related, joins_of=joins_of, statuses=statuses)
 
     # ------------------------------------------------------------- maintenance
     def rebuild_projection(self) -> int:
