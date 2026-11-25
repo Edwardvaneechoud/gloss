@@ -4,16 +4,21 @@ A subject's effective level is its own accepted ``confidentiality``, else its se
 (fields), else its dataset's, else ``internal``. A relationship is as confidential as the
 more confidential of the datasets it joins. A semantic type's *definition* is never
 confidential; the columns that use it are.
+
+That is the published level. A host deciding what must not leave it (into a prompt, an export) asks
+:func:`above` instead, which lets the strongest live claim win, so a proposal protects at once.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from .ids import Kind, SubjectId
-from .model import Confidentiality, Status
+from .model import LIVE_STATUSES, Confidentiality, Status
+from .store.base import Query
 
 if TYPE_CHECKING:
     from .store import SQLStore
@@ -83,3 +88,34 @@ def levels(store: SQLStore, subjects: Iterable[str]) -> dict[str, Confidentialit
         )
         out[s] = Confidentiality.from_rank(rank)
     return out
+
+
+@dataclass(frozen=True)
+class Above:
+    """What lies above a level: whole datasets (by key) and, per dataset key, single columns."""
+
+    datasets: frozenset[str] = frozenset()
+    columns: Mapping[str, frozenset[str]] = field(default_factory=dict)
+
+
+def above(store: SQLStore, limit: Confidentiality, *, statuses: Iterable[Status] = LIVE_STATUSES) -> Above:
+    """Datasets and columns whose level is above ``limit`` by the strongest fact in ``statuses``, in one query.
+
+    A column counts when its own fact or a semantic type it uses says so, a dataset (with all of its columns) when
+    its own fact does. Where :func:`levels` answers "what is this subject's agreed level", with a column's own level
+    winning over its type's, this takes the highest of every fact that can set it, proposals and stale facts
+    included: it is for withholding, where being late is worse than being strict.
+    """
+    rows = store.find(Query(attributes=("confidentiality", "semantic_type"), statuses=list(statuses)))
+    facts = [(SubjectId.parse(a.subject), a) for a in rows]
+    high = {sid for sid, a in facts if a.attribute == "confidentiality" and Confidentiality(a.value) > limit}
+    types = {sid.ref for sid in high if sid.kind is Kind.TYPE}
+    typed = {sid for sid, a in facts if a.attribute == "semantic_type" and a.value in types}
+    columns: dict[str, set[str]] = defaultdict(set)
+    for sid in high | typed:
+        if sid.kind is Kind.FIELD:
+            columns[sid.dataset or ""].add(sid.name or "")
+    return Above(
+        frozenset(sid.dataset or "" for sid in high if sid.kind is Kind.DATASET),
+        {key: frozenset(names) for key, names in columns.items()},
+    )

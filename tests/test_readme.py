@@ -69,6 +69,10 @@ def test_python_guide_runs_in_order(tmp_path):
     assert "\n[]\n" in out  # Ossie validation errors: none
     assert "Integer" in out  # DictCatalog example
     assert "['crm.customers', 'crm.orders']" in out and "[('crm.orders', 'revenue')]" in out
+    assert "SUM(orders.amount) AS" in out and "['crm.orders', 'crm.customers'] True" in out  # a compiled query
+    assert "ok - customer_id is unique in customers (2 of 2 rows)" in out and "\nreversed\n" in out
+    assert "Counts(roles=5, descriptions=0, joins=1, metrics=5)" in out
+    assert "amount inferred:rules - Rule: amount is numeric (Float64) and repeats" in out and "\n11\n10\n" in out
     assert "ai:claude search" in out  # the read hook
     assert "2 new, 0 unchanged, 2 accepted\nMeeting notes\n1\n" in out  # solo mode
     assert "{'from_status': 'proposed', 'auto': True, 'rule': 'solo'}" in out

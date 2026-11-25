@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "glosslayer-flowfile"
-version = "0.1.0"
+version = "0.2.0"
 description = "Gloss plugin for the Flowfile catalog: catalog seam plus lineage-based proposals."
 readme = "README.md"
 license = "Apache-2.0"
@@ -23,7 +23,7 @@ classifiers = [
   "Programming Language :: Python :: 3.15",
   "Topic :: Database",
 ]
-dependencies = ["glosslayer>=0.1.0,<0.2"]
+dependencies = ["glosslayer>=0.2.0,<0.3"]
 
 [project.urls]
 Homepage = "https://github.com/Edwardvaneechoud/glosslayer"

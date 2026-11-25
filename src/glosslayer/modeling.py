@@ -255,9 +255,9 @@ class Metric:
     """A number with an agreed definition.
 
     ``expression`` is the SQL that computes it and is all Ossie needs. The structured parts are
-    optional and let a host answer "this metric by these dimensions over this period" without
-    parsing SQL: ``aggregate`` (``"sum(amount)"``), ``filter``, ``time_column``, the allowed
-    ``dimensions`` and a number ``format``. Compiling a query from them is the host's job.
+    optional and answer "this metric by these dimensions over this period" without parsing SQL:
+    ``aggregate`` (``"sum(amount)"``), ``filter``, ``time_column``, the allowed ``dimensions`` and a
+    number ``format``. ``glosslayer.query`` compiles a query from them; running it is the host's job.
     """
 
     name: str

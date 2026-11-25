@@ -5,7 +5,7 @@
 | Layer | Owns | Does not own |
 |---|---|---|
 | **Apache Ossie** | The *format* of a semantic model: datasets, fields, relationships, metrics, AI context | Workflow, review, confidentiality, history |
-| **Gloss core** | Facts about the model, their lifecycle, the event log, the mechanism of review and scoped reads, projections | Any specific catalog, tool or UI; who the users are; what they are allowed |
+| **Gloss core** | Facts about the model, their lifecycle, the event log, the mechanism of review and scoped reads, projections; compiling metric queries, the questions that measure a join or a column | Any specific catalog, tool or UI; who the users are; what they are allowed; running SQL |
 | **The host's policy** | Who may do what, what is accepted without review, who reads what | The mechanism |
 | **Plugins** | Talking to a specific catalog, importer, exporter or AI | The workflow rules |
 
@@ -119,6 +119,25 @@ where the status is accepted makes a lost race an error the ledger retries, not 
 and pending markers are exported under `nonportable_extensions[vendor_name=gloss]`, so exports stay
 valid Ossie and round trips keep them.
 
+**Gloss writes SQL and never runs it.** Compiling a metric query, measuring a join and collecting the
+statistics rules need are the same everywhere; where the data lives and who may read it are not. So
+`glosslayer.query` returns a statement, and what needs an answer (`joins.check`, `rules.collect_stats`, a
+metric's dry-run) takes the host's `execute(sql) -> rows`. `execute` tells a failed statement
+(`QueryFailed`) from an engine that is not there (`EngineUnavailable`), because the first is about one table
+and the second about every statement after it: authoring goes on without an engine, and nothing is refused for
+its absence. Table naming and the dialect are options, not assumptions.
+
+**Two ways of reading a model.** `snapshot`, `tables()` and the other readers merge statuses into one value per
+attribute: what the model *is*. `model_view` keeps the accepted value and the open facts beside it, because a
+reviewer decides between them. Both go through the reader's scope and redaction.
+
+**The published level and the withheld level differ.** `visibility.levels` is what was agreed, with a column's own
+level winning over its type's. `visibility.above` is for a host deciding what must not leave it: the strongest of
+every live claim counts, so a proposal protects before anyone has reviewed it.
+
+**Taking away is append-only too.** `withdraw` is not a delete: it retracts what is held and rejects what someone
+else proposed, in one transaction, and asks the policy per fact like any other decision.
+
 ## Embedding vs service
 
 Both modes use the same `Gloss` object:
@@ -150,4 +169,5 @@ only ever touches tables prefixed `gloss_`.
 - The first sync of a very large catalog is about a minute (≈55 s for 10k tables on SQLite).
 - On Postgres appends are serialised by an advisory lock (so sequence order is commit order). That is
   one writer at a time per database, which is plenty for metadata and would not be for telemetry.
-- Structured metric attributes are stored and exported; compiling them into queries is left to the host.
+- A metric query reads one metric of one table; namespace metrics (no table) are not compiled. Expressions are
+  tokenized, not parsed, to find `table.column` chains.
