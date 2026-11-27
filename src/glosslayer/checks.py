@@ -21,6 +21,9 @@ Running them:
   failure in a single pass, for hosts that never collect in the calling process: ship
   ``plan.frame`` to wherever the data is, collect it there, and hand the one-row result to
   ``plan.results(row)``;
+* ``run_plan(plan, collect)`` turns such a plan into results through the host's own ``collect``, one check at a
+  time when the single pass fails, so a check that cannot be evaluated never hides the rest;
+* ``plan(items, "shop.orders", lazy_frame)`` plans checks that are not in the ledger (a list being proposed);
 * ``to_sql(g, "shop.orders", dialect="duckdb")`` produces one query per check to run anywhere.
 
 Results can be logged with ``g.record_check_results(results, run_id=...)`` and read back with
@@ -33,7 +36,7 @@ decorate with :func:`register`.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -77,6 +80,9 @@ class Check:
         """A short readable form, e.g. ``between(min=0, max=10)``."""
         args = ", ".join(f"{f.name}={getattr(self, f.name)!r}" for f in fields(self) if getattr(self, f.name) is not None)
         return f"{self.kind}({args})"
+
+    def verify(self) -> None:
+        """Raise ``ValueError`` when the parameters cannot make a meaningful check; called when one is proposed."""
 
     # Implement one or both. Each returns a *pass* condition.
     def polars(self, col: str) -> Any:  # -> pl.Expr (True = row passes)
@@ -155,6 +161,10 @@ class Matches(Check):
     def __post_init__(self) -> None:
         re.compile(self.pattern)
 
+    def verify(self) -> None:
+        if not isinstance(self.pattern, str) or not self.pattern:
+            raise ValueError("matches needs a pattern")
+
     def polars(self, col: str) -> Any:
         import polars as pl
 
@@ -189,6 +199,10 @@ class OneOf(Check):
     def to_dict(self) -> dict[str, Any]:
         return {"check": self.kind, "values": list(self.values)}
 
+    def verify(self) -> None:
+        if not self.values:
+            raise ValueError("one_of needs at least one value")
+
     def polars(self, col: str) -> Any:
         import polars as pl
 
@@ -206,6 +220,10 @@ class Between(Check):
     min: Any = None
     max: Any = None
     kind: ClassVar[str] = "between"
+
+    def verify(self) -> None:
+        if self.min is None and self.max is None:
+            raise ValueError("between needs a min or a max")
 
     def polars(self, col: str) -> Any:
         import polars as pl
@@ -232,6 +250,15 @@ class Length(Check):
     min: int | None = None
     max: int | None = None
     kind: ClassVar[str] = "length"
+
+    def verify(self) -> None:
+        bounds = [b for b in (self.min, self.max) if b is not None]
+        if not bounds:
+            raise ValueError("length needs a min or a max")
+        if any(isinstance(b, bool) or not isinstance(b, int) or b < 0 for b in bounds):
+            raise ValueError("length bounds must be whole numbers of 0 or more")
+        if len(bounds) == 2 and self.min > self.max:
+            raise ValueError("length needs min to be at most max")
 
     def polars(self, col: str) -> Any:
         import polars as pl
@@ -332,6 +359,25 @@ def normalise(items: Sequence[Check | dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def validate(items: Sequence[Check | dict[str, Any]]) -> list[dict[str, Any]]:
+    """Checks as stored, refused when one cannot work: what a proposed ``checks`` value goes through.
+
+    A check of a registered kind is built and asked to :meth:`Check.verify` itself, and a check listed twice is
+    refused. A kind this process does not know is kept as it is: it may be registered where the checks run.
+    """
+    out = normalise(items)
+    for i, d in enumerate(out):
+        if d in out[:i]:
+            raise ValueError(f"The same check is listed twice: {d!r}")
+        if d["check"] not in _REGISTRY:
+            continue
+        try:
+            Check.from_dict(d).verify()
+        except (TypeError, re.error) as exc:
+            raise ValueError(f"Check {d['check']!r} is not valid: {exc}") from None
+    return out
+
+
 # ---------------------------------------------------------------------- running
 @dataclass
 class CheckResult:
@@ -419,33 +465,99 @@ class CheckPlan:
         return self.source.filter(~self.conditions[column].fill_null(False))
 
 
-def polars_plan(gloss: Gloss, dataset: str, frame: Any) -> CheckPlan:
-    """Plan every effective check of ``dataset`` over a Polars LazyFrame (or DataFrame), in one pass."""
+def plan(items: Mapping[str, Sequence[tuple[Check | dict[str, Any], str | None]]], dataset: str, frame: Any, *,
+         schema: Iterable[str] | None = None) -> CheckPlan:
+    """Plan ``{field: [(check, origin), ...]}`` over a Polars LazyFrame (or DataFrame) in one pass, without a ledger.
+
+    ``schema`` is the frame's column names (or a mapping keyed by them) when the host knows them: the frame's own
+    schema is then not resolved here, where its scan may not be readable. A check that cannot be planned (its
+    column is missing, it has no Polars form, its parameters do not build) lands in ``errors``, never raises.
+    """
     import polars as pl
 
     from .ids import SubjectId
 
     lf = frame.lazy()
-    columns = set(lf.collect_schema().names())
+    columns = set(schema) if schema is not None else set(lf.collect_schema().names())
     exprs = [pl.len().alias("__total__")]
-    plan = CheckPlan(None, [], [], source=lf)
-    for fname, items in effective_checks(gloss, dataset).items():
+    out = CheckPlan(None, [], [], source=lf)
+    for fname, field_items in items.items():
         subj = str(SubjectId.for_field(dataset, fname))
-        for chk, origin in items:
+        for chk, origin in field_items:
+            chk = chk.to_dict() if isinstance(chk, Check) else chk
             if fname not in columns:
-                plan.errors.append(CheckResult(subj, chk, False, 0, 0, origin, error=f"column {fname!r} not in data"))
+                out.errors.append(CheckResult(subj, chk, False, 0, 0, origin, error=f"column {fname!r} not in data"))
                 continue
             try:
                 passes = Check.from_dict(chk).polars(fname)
-            except (NotImplementedError, ValueError, TypeError, pl.exceptions.PolarsError) as exc:
-                plan.errors.append(CheckResult(subj, chk, False, 0, 0, origin, error=str(exc)))
+            except Exception as exc:  # noqa: BLE001
+                out.errors.append(CheckResult(subj, chk, False, 0, 0, origin, error=_reason(exc)))
                 continue
-            col = f"c{len(plan.items)}"
-            plan.conditions[col] = passes
-            exprs.append((~passes.fill_null(False)).sum().alias(col))
-            plan.items.append((subj, chk, origin, col))
-    plan.frame = lf.select(exprs)
-    return plan
+            col = f"c{len(out.items)}"
+            out.conditions[col] = passes
+            exprs.append(_failures(passes).alias(col))
+            out.items.append((subj, chk, origin, col))
+    out.frame = lf.select(exprs)
+    return out
+
+
+def polars_plan(gloss: Gloss, dataset: str, frame: Any, *, schema: Iterable[str] | None = None) -> CheckPlan:
+    """Plan every effective check of ``dataset`` over a Polars LazyFrame (or DataFrame), in one pass.
+
+    ``schema`` as in :func:`plan`.
+    """
+    return plan(effective_checks(gloss, dataset), dataset, frame, schema=schema)
+
+
+def run_plan(plan: CheckPlan, collect: Callable[[Any], Any]) -> list[CheckResult]:
+    """The results of ``plan``, each LazyFrame collected by ``collect`` wherever the data is.
+
+    ``collect`` takes a LazyFrame that yields one row and returns that row (a mapping or a one-row DataFrame).
+    When the single pass fails, every check is collected on its own, so a check that cannot be evaluated on this
+    data reports its error and the rest still report. :class:`~glosslayer.dialect.EngineUnavailable` raised by
+    ``collect`` is no check's failure and is raised.
+    """
+    import polars as pl
+
+    from .dialect import EngineUnavailable
+
+    try:
+        return plan.results(collect(plan.frame))
+    except EngineUnavailable:
+        raise
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        total = int(_named(collect(plan.source.select(pl.len().alias("__total__"))))["__total__"])
+    except EngineUnavailable:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        failed = [CheckResult(subj, chk, False, 0, 0, origin, error=_reason(exc)) for subj, chk, origin, _c in plan.items]
+        return failed + list(plan.errors)
+    results = []
+    for subj, chk, origin, col in plan.items:
+        try:
+            n = int(_named(collect(plan.source.select(_failures(plan.conditions[col]).alias(col))))[col])
+            results.append(CheckResult(subj, chk, n == 0, n, total, origin))
+        except EngineUnavailable:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            results.append(CheckResult(subj, chk, False, 0, total, origin, error=_reason(exc)))
+    return results + [replace(e, total_rows=total) for e in plan.errors]
+
+
+def _failures(passes: Any) -> Any:
+    return (~passes.fill_null(False)).sum()
+
+
+def _named(row: Any) -> Any:
+    return row.row(0, named=True) if hasattr(row, "row") else row
+
+
+def _reason(exc: BaseException) -> str:
+    """The first line of an error: engines append a plan dump that is no reason."""
+    lines = str(exc).splitlines()
+    return (lines[0].strip() if lines else "") or type(exc).__name__
 
 
 def run_polars(gloss: Gloss, dataset: str, df: Any, *, sample_size: int = 5) -> list[CheckResult]:
@@ -454,25 +566,11 @@ def run_polars(gloss: Gloss, dataset: str, df: Any, *, sample_size: int = 5) -> 
     One pass counts all failures; a few failing values are then sampled per failed check,
     except for fields above ``internal`` confidentiality.
     """
-    import polars as pl
-
     from .model import Confidentiality
     from .visibility import levels
 
     plan = polars_plan(gloss, dataset, df)
-    try:
-        results = plan.results(plan.frame.collect())
-    except pl.exceptions.PolarsError:
-        # one check cannot be evaluated on this data: run them one by one so the rest still report
-        total = df.lazy().select(pl.len()).collect().item()
-        results = []
-        for subj, chk, origin, col in plan.items:
-            try:
-                n = plan.failing(col).select(pl.len()).collect().item()
-                results.append(CheckResult(subj, chk, n == 0, n, total, origin))
-            except pl.exceptions.PolarsError as exc:
-                results.append(CheckResult(subj, chk, False, 0, total, origin, error=str(exc)))
-        results += [replace(e, total_rows=total) for e in plan.errors]
+    results = run_plan(plan, lambda frame: frame.collect())
     if sample_size:
         columns = {subj: col for subj, _chk, _origin, col in plan.items}
         hidden = {s for s, lv in levels(gloss.store, columns).items() if lv > Confidentiality.INTERNAL}

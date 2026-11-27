@@ -109,8 +109,9 @@ Design rationale: `docs/architecture.md`.
   the exporter and importer bodies. Add it to the relevant `modeling.py` dataclass and tests. If it changes
   what goes into index rows, bump `search_index.INDEX_VERSION`.
 - **A new check:** subclass `checks.Check`, set `kind`, implement `polars()` and/or `sql()` (both return
-  a *pass* condition; nulls pass unless the check is about nulls), decorate with `@register`. Add it to the
-  Polars and DuckDB parametrised tests in `tests/test_semantic_types.py`.
+  a *pass* condition; nulls pass unless the check is about nulls), decorate with `@register`. Parameter rules
+  go in `verify()` (run by `checks.validate` when a check is proposed), never in `__post_init__`, so a stored
+  check still reads. Add it to the Polars and DuckDB parametrised tests in `tests/test_semantic_types.py`.
 - **A new plugin:** a plain class matching a protocol in `seams.py`, registered with
   `plugins.register(kind, name, cls)` or under the `gloss.catalogs` / `gloss.sources` / `gloss.sinks`
   entry points. Built-ins are also listed in `plugins._BUILTINS`. A catalog whose listing can be partial

@@ -219,11 +219,11 @@ def _type_ref(value: Any) -> str:
 
 
 def _checks(value: Any) -> list[dict[str, Any]]:
-    from .checks import normalise
+    from .checks import validate
 
     if not isinstance(value, list):
         raise ValueError("must be a list")
-    return normalise(value)
+    return validate(value)
 
 
 def _patterns(value: Any) -> list[str]:
