@@ -152,7 +152,11 @@ def test_run_plan_raises_when_there_is_no_engine():
     [{"check": "length", "min": 3, "max": 2}],
     [{"check": "length", "max": 1.5}],
     [{"check": "one_of", "values": []}],
+    [{"check": "one_of", "values": "abc"}],
+    [{"check": "between", "min": 9, "max": 1}],
     [{"check": "not_null"}, {"check": "not_null"}],
+    [1],
+    ["not_null"],
 ])
 def test_a_check_that_cannot_work_is_refused_when_proposed(g, bad):
     with pytest.raises(ValueError):
@@ -167,3 +171,16 @@ def test_validate_keeps_good_and_unknown_checks_as_they_are():
     assert checks.validate(good) == [{"check": "not_null"}, {"check": "between", "min": 0},
                                      {"check": "length", "max": 3}, {"check": "one_of", "values": ["a"]},
                                      {"check": "from_the_future", "x": 1}]
+
+
+@pytest.mark.parametrize(("values", "data", "failed"), [
+    ([1, 2], [1.0, 2.0, 2.5, None], 1),
+    ([1.0, 2.5], [1, 2, None], 1),
+    ([2**60 + 1], [2**60 + 1, 2**60], 1),
+    (["a"], ["a", "b", None], 1),
+    ([True], [True, False, None], 1),
+])
+def test_one_of_compares_numbers_by_value_whatever_the_columns_number_type(values, data, failed):
+    plan = checks.plan({"n": [(checks.one_of(values), None)]}, "t", pl.LazyFrame({"n": data}))
+    [result] = checks.run_plan(plan, lambda frame: frame.collect())
+    assert (result.error, result.failed_rows) == (None, failed)
