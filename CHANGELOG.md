@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.1 (unreleased)
+## 0.2.1 (2026-11-27)
 
 Only additions to `glosslayer.checks`; the event format, subject grammar and database schema are unchanged.
 
