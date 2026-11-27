@@ -435,7 +435,8 @@ gloss types                                       # each type, its checks, and w
 
 **Checks** are declarations stored as facts, so they're reviewed and logged too: `not_null()`, `unique()`,
 `matches(regex)`, `one_of([...])`, `between(min, max)`, `length(min, max)`, `sql("{column} >= 0")`, or your
-own (see [Writing plugins](#writing-plugins)). Run them on a Polars DataFrame:
+own (see [Writing plugins](#writing-plugins)). A check that cannot work (a pattern that does not compile, a
+`between` without a bound, the same check twice) is refused when it is proposed. Run them on a Polars DataFrame:
 
 ```python
 import polars as pl
@@ -456,9 +457,11 @@ g.record_check_results(results, runner=Human("edward"))     # quality history pe
 history = g.check_history(dataset="crm.customers")
 
 # For engines that never collect in the calling process: one lazy query counts every failure.
-plan = glosslayer.checks.polars_plan(g, "crm.customers", df.lazy())
+plan = glosslayer.checks.polars_plan(g, "crm.customers", df.lazy(), schema=df.columns)   # names you already know
 row = plan.frame.collect()                     # ship plan.frame to where the data is, collect it there
 results = plan.results(row)                    # the same CheckResults, from that one row
+# Or hand over your collect: a check that cannot run on this data then reports its error, the rest still count.
+results = glosslayer.checks.run_plan(plan, lambda frame: frame.collect())
 g.record_check_results(results, runner="system:worker-1", run_id="run-2026-11-23-001")   # your own run id
 ```
 

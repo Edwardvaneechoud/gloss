@@ -90,3 +90,80 @@ def test_effective_checks_reads_one_table(model, monkeypatch):
 
 def test_gloss_is_importable_without_polars_for_plans():
     assert callable(glosslayer.checks.polars_plan)
+
+
+def test_a_plan_needs_no_ledger_and_no_schema_from_the_frame(monkeypatch):
+    def refuse(self):
+        raise AssertionError("the frame's schema was resolved")
+
+    monkeypatch.setattr(pl.LazyFrame, "collect_schema", refuse)
+    items = {"n": [(checks.between(0, 10), None), ({"check": "not_null"}, "type:amount")],
+             "gone": [(checks.not_null(), None)]}
+    plan = checks.plan(items, "shop.orders", pl.LazyFrame({"n": [1, 50, None]}), schema=["n"])
+    by_kind = {r.check["check"]: r for r in checks.run_plan(plan, lambda frame: frame.collect()) if not r.error}
+    assert by_kind["between"].failed_rows == 1 and by_kind["between"].subject == "field:shop.orders/n"
+    assert by_kind["not_null"].failed_rows == 1 and by_kind["not_null"].origin == "type:amount"
+    assert [e.error for e in plan.errors] == ["column 'gone' not in data"]
+
+
+def test_a_stored_check_that_does_not_build_is_an_error_of_its_own():
+    items = {"c": [({"check": "matches", "pattern": "("}, None), ({"check": "length", "bogus": 1}, None),
+                   (checks.not_null(), None)]}
+    plan = checks.plan(items, "t", pl.LazyFrame({"c": ["a", None]}))
+    assert [e.check["check"] for e in plan.errors] == ["matches", "length"] and all(e.error for e in plan.errors)
+    results = checks.run_plan(plan, lambda frame: frame.collect())
+    assert [(r.check["check"], r.failed_rows, r.total_rows) for r in results if not r.error] == [("not_null", 1, 2)]
+    assert {r.total_rows for r in results} == {2}
+
+
+def test_run_plan_collects_one_check_at_a_time_when_the_pass_fails():
+    items = {"n": [(checks.between("a", None), None), (checks.not_null(), None)]}
+    plan = checks.plan(items, "t", pl.LazyFrame({"n": [1.5, None]}))
+    seen = []
+
+    def collect(frame):
+        seen.append(frame)
+        return frame.collect()
+
+    by_kind = {r.check["check"]: r for r in checks.run_plan(plan, collect)}
+    assert len(seen) == 4  # the pass, the row count, then each check
+    assert by_kind["between"].error and "\n" not in by_kind["between"].error and not by_kind["between"].passed
+    assert by_kind["not_null"].error is None and (by_kind["not_null"].failed_rows, by_kind["not_null"].total_rows) == (1, 2)
+
+
+def test_run_plan_raises_when_there_is_no_engine():
+    from glosslayer.dialect import EngineUnavailable
+
+    def collect(frame):
+        raise EngineUnavailable("no worker")
+
+    plan = checks.plan({"n": [(checks.not_null(), None)]}, "t", pl.LazyFrame({"n": [1]}))
+    with pytest.raises(EngineUnavailable):
+        checks.run_plan(plan, collect)
+
+
+@pytest.mark.parametrize("bad", [
+    [{"check": "matches", "pattern": "("}],
+    [{"check": "matches"}],
+    [{"check": "between"}],
+    [{"check": "between", "min": 0, "bogus": 1}],
+    [{"check": "length"}],
+    [{"check": "length", "max": -1}],
+    [{"check": "length", "min": 3, "max": 2}],
+    [{"check": "length", "max": 1.5}],
+    [{"check": "one_of", "values": []}],
+    [{"check": "not_null"}, {"check": "not_null"}],
+])
+def test_a_check_that_cannot_work_is_refused_when_proposed(g, bad):
+    with pytest.raises(ValueError):
+        checks.validate(bad)
+    with pytest.raises(ValueError):
+        g.add(Table("t").add_columns(Column("c", str, checks=bad)), source=Human("a"), accept=True)
+
+
+def test_validate_keeps_good_and_unknown_checks_as_they_are():
+    good = [checks.not_null(), checks.between(0, None), checks.length(max=3), checks.one_of(["a"]),
+            {"check": "from_the_future", "x": 1}]
+    assert checks.validate(good) == [{"check": "not_null"}, {"check": "between", "min": 0},
+                                     {"check": "length", "max": 3}, {"check": "one_of", "values": ["a"]},
+                                     {"check": "from_the_future", "x": 1}]

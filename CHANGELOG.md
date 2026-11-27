@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.1 (unreleased)
+
+Only additions to `glosslayer.checks`; the event format, subject grammar and database schema are unchanged.
+
+- `checks.plan(items, dataset, frame)`: plan checks that are not in the ledger, such as a list being proposed.
+- `plan` and `polars_plan` take `schema=`, the column names the host already knows, so the frame's own schema is
+  not resolved in the calling process.
+- `checks.run_plan(plan, collect)`: results through the host's own `collect`, one check at a time when the single
+  pass fails; `run_polars` is built on it. A check's error is the first line of what the engine said.
+- `checks.validate`, applied to every proposed `checks` value: a registered check whose parameters do not build
+  or cannot work (`Check.verify`) and a check listed twice are refused. Unknown kinds are kept as before.
+- A stored check that does not build (a pattern that no longer compiles) is an error of its own in a plan, not an
+  exception for the whole table.
+
 ## 0.2.0 (2026-11-25)
 
 Only additions: the event format, subject grammar and database schema are unchanged.
