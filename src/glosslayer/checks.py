@@ -39,6 +39,8 @@ import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime, timezone
+from functools import reduce
+from operator import or_
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
@@ -102,6 +104,10 @@ class Check:
 
 def _q(col: str) -> str:
     return '"' + col.replace('"', '""') + '"'
+
+
+def _is_number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
 def _lit(v: Any) -> str:
@@ -188,12 +194,17 @@ class Matches(Check):
 @register
 @dataclass(frozen=True)
 class OneOf(Check):
-    """Passes when the value is one of ``values``; nulls pass."""
+    """Passes when the value is one of ``values``; nulls pass.
+
+    Numbers are compared by value, so ``[1, 2]`` holds for a float column and ``[1.0]`` for an integer one.
+    """
 
     values: tuple[Any, ...] = ()
     kind: ClassVar[str] = "one_of"
 
     def __post_init__(self) -> None:
+        if isinstance(self.values, (str, bytes)):
+            raise TypeError("one_of takes a list of values, not text")
         object.__setattr__(self, "values", tuple(self.values))
 
     def to_dict(self) -> dict[str, Any]:
@@ -206,7 +217,13 @@ class OneOf(Check):
     def polars(self, col: str) -> Any:
         import polars as pl
 
-        return pl.col(col).is_in(list(self.values)) | pl.col(col).is_null()
+        e = pl.col(col)
+        if self.values and all(_is_number(v) for v in self.values):
+            # compared one by one: is_in refuses whole numbers on a float column, and the reverse
+            found = reduce(or_, [e == v for v in self.values])
+        else:
+            found = e.is_in(list(self.values))
+        return found | e.is_null()
 
     def sql(self, col: str, dialect: str = "ansi") -> str:
         return f"({_q(col)} IS NULL OR {_q(col)} IN ({', '.join(_lit(v) for v in self.values)}))"
@@ -224,6 +241,12 @@ class Between(Check):
     def verify(self) -> None:
         if self.min is None and self.max is None:
             raise ValueError("between needs a min or a max")
+        try:
+            apart = self.min is not None and self.max is not None and self.min > self.max
+        except TypeError:
+            apart = False
+        if apart:
+            raise ValueError("between needs min to be at most max")
 
     def polars(self, col: str) -> Any:
         import polars as pl
@@ -350,8 +373,12 @@ def sql(expression: str) -> Check:
 
 def normalise(items: Sequence[Check | dict[str, Any]]) -> list[dict[str, Any]]:
     """Checks as stored: a list of dicts with a ``check`` key."""
+    if isinstance(items, (str, bytes, Mapping)) or not isinstance(items, Iterable):
+        raise ValueError(f"Checks are a list, not {items!r}")
     out = []
     for c in items:
+        if not isinstance(c, (Check, Mapping)):
+            raise ValueError(f"A check is a mapping with a 'check' kind, not {c!r}")
         d = c.to_dict() if isinstance(c, Check) else dict(c)
         if not isinstance(d.get("check"), str):
             raise ValueError(f"A check needs a 'check' kind: {d!r}")

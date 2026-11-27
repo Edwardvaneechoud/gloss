@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2 (2026-11-27)
+
+Fixes in `glosslayer.checks`; nothing else changes.
+
+- `one_of` compares numbers by value: whole numbers hold for a float column and the reverse, where Polars'
+  `is_in` refused the list. Other values go through `is_in` as before.
+- Refused when proposed: `between` with `min` above `max`, `one_of` whose `values` is text instead of a list, and
+  a `checks` value whose items are not mappings (a `ValueError`, where it was a `TypeError`).
+
 ## 0.2.1 (2026-11-27)
 
 Only additions to `glosslayer.checks`; the event format, subject grammar and database schema are unchanged.

@@ -30,7 +30,7 @@ from .seams import AssetSchema, Catalog, Coverage, Sink, Source
 from .semantic import TypeSuggester
 from .store import ConcurrentWrite, Query, SQLStore, Store
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 __all__ = [
     "AI",
